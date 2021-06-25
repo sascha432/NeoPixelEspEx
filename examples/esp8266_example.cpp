@@ -11,7 +11,7 @@
 #endif
 
 #ifndef NEOPIXEL_NUM_PIXELS
-#define NEOPIXEL_NUM_PIXELS 1
+#define NEOPIXEL_NUM_PIXELS 2
 #endif
 
 NeoPixelEx::Strip<NEOPIXEL_OUTPUT_PIN, NEOPIXEL_NUM_PIXELS, NeoPixelEx::GRB, NeoPixelEx::TimingsWS2813<F_CPU>::type> pixels;
@@ -20,12 +20,14 @@ extern bool record_serial_output;
 extern String serial_output;
 
 #if defined(ESP8266)
+
 extern "C" void custom_crash_callback(struct rst_info *rst_info, uint32_t stack, uint32_t stack_end);
 
 void custom_crash_callback(struct rst_info *rst_info, uint32_t stack, uint32_t stack_end)
 {
-    // NeoPixel_clearStrips();
+    NeoPixelEx::forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, 256);
 }
+
 #endif
 
 #if 0
@@ -40,13 +42,13 @@ void preinit() {
 void setup()
 {
     NeoPixelEx::forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, 256);
+    delay(2);
 
     Serial.begin(115200);
     Serial.println(F("Starting..."));
 
 
     pixels.begin();
-    pixels.clear();
 }
 
 #if 0
@@ -115,7 +117,7 @@ static int get_type_incr()
         (ptr == &color.g) ||
         (ptr == &color.r)
     ) {
-        return get_type_incr_key_repeat_timeout ? 4 : 1;
+        return 16;//get_type_incr_key_repeat_timeout ? 4 : 1;
     }
     if (ptr == &delayMillis) {
         return 1;
@@ -170,6 +172,11 @@ void loop()
                     while(Serial.available()) {
                         Serial.read();
                     }
+                    break;
+                case 'o':
+                    Serial.println(F("off..."));
+                    NeoPixelEx::forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, 256);
+                    for(;;) { delay(1000); }
                     break;
             #if defined(ESP8266)
                 case 'T':

@@ -394,6 +394,7 @@ namespace NeoPixelEx {
         delayMicroseconds(_Chipset::kCyclesToMicros(_Chipset::kCyclesMaxWait));
         #if defined(ESP8266)
             ets_intr_lock();
+            ets_intr_lock();
         #endif
         uint8_t buf[1];
         NeoPixel_espShow(pin, buf, numBytes, kNeoPixelNoRetries);

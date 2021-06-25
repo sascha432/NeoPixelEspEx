@@ -185,14 +185,21 @@ bool IRAM_ATTR espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const
         }
 #endif
 
-        // get next bit while waiting for the low time
         if (!(mask >>= 1)) {
-            pix = p < end ? applyBrightness(p, brightness) : 0;
-            mask = 0x80;
+            if (p < end) {
+                mask = 0x80; // load next byte
+            }
+            else {
+                mask = 0; // end of frame
+            }
         }
 
         while (((c = _getCycleCount()) - startTime) < t)
             ; // Wait high duration
+
+        if (mask == 0x80) {
+            pix =  applyBrightness(p, brightness);
+        }
 
 #if NEOPIXEL_ALLOW_INTERRUPTS
         if (allowInterrupts) {
@@ -208,7 +215,7 @@ bool IRAM_ATTR espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const
 #endif
 
         gpio_set_level_low(pin, pinMask, invPinMask);
-        if (mask == 1 && p >= end) {
+        if (mask == 0) {//} && p >= end) {
             break;
         }
 
@@ -257,7 +264,7 @@ static bool _init_toggle() {
 
 bool NeoPixel_espShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint16_t brightness)
 {
-#if NEOPIXEL_DEBUG_TRIGGER_PIN
+#if NEOPIXEL_DEBUG_TRIGGER_PIN && 0
     if ((_toogle = !_toogle)) {
         GPOC = _BV(NEOPIXEL_DEBUG_TRIGGER_PIN);
     } else {
@@ -290,6 +297,13 @@ bool NeoPixel_espShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uin
     period = Timings::kCyclesPeriod;
     reset = Timings::kCyclesRES;
 
+#if NEOPIXEL_DEBUG_TRIGGER_PIN && 1
+    if ((_toogle = !_toogle)) {
+        GPOC = _BV(NEOPIXEL_DEBUG_TRIGGER_PIN);
+    } else {
+        GPOS = _BV(NEOPIXEL_DEBUG_TRIGGER_PIN);
+    }
+#endif
     bool result;
     #if NEOPIXEL_INTERRUPT_RETRY_COUNT > 0
         uint8_t retries = NEOPIXEL_INTERRUPT_RETRY_COUNT;

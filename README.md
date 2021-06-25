@@ -12,7 +12,6 @@ Library for WS281x and compatible LEDs for ESP8266 and ESP32. It can be used as 
 - Support for interrupts and retries if interrupted (ESP8266)
 - Support for GRB, RGB and other types
 - Function to safely clear pixels without using any memory, for example during boot, restart, crash...
-- Safety functions to protect LEDs and controller during shutdown
 - Can be integrated into FastLED instead of show() or used as slim standalone version that does not need IRAM
 
 ## Examples
@@ -29,9 +28,6 @@ uint8_t one_pixel[3] = { 0x20, 0, 0 };
 
 NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, one_pixel, sizeof(one_pixel));
 ```
-
-## Advanced usage
-
 
 ## Pins ESP8266
 
