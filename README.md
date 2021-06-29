@@ -4,29 +4,94 @@ Library for WS281x and compatible LEDs for ESP8266 and ESP32. It can be used as 
 
 ## Features
 
-- Support for dynamic CPU speed (ESP8266 80/160MHHz) with runtime switching
 - Support for ESP8266/GPIO16
 - Support for ESP32
 - Option for ESP8266 to use precaching instead of IRAM
 - Support for brightness scaling
 - Support for interrupts and retries if interrupted (ESP8266)
 - Support for GRB, RGB and other types
-- Function to safely clear pixels without using any memory, for example during boot, restart, crash...
+- Function to safely clear pixels without allocating any memory, for example during boot, restart, crash...
 - Can be integrated into FastLED instead of show() or used as slim standalone version that does not need IRAM
 
 ## Examples
 
 Examples for PlatformIO can be found in the `examples/` folder.
 
-## Basic usage / Legacy function
+## FastLED
+
+A workaround for FastLED and v3.0.0 is to replace `FastLED.show()` with `NeoPixel_espShow()`. Only brightness is supported.
+
+```c++
+CRGB pixel_data[8];
+NeoPixel_espShow(pin, reinterpret_cast<uint8_t *>(pixel_data), sizeof(pixel_data) * sizeof(*pixel_data), FastLED.getBrightness());
+```
+
+## Basic usage
+
+It is recommended to use the class `NeoPixelEx::Strip` instead of `NeoPixel_espShow()`.
 
 ```c++
 #include <NeoPixelEspEx.h>
 
 #define NEOPIXEL_OUTPUT_PIN 12
-uint8_t one_pixel[3] = { 0x20, 0, 0 };
 
-NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, one_pixel, sizeof(one_pixel));
+void setup() {
+  pinMode(NEOPIXEL_OUTPUT_PIN, OUTPUT);
+  ...
+}
+
+void loop() {
+  ...
+  // set color of first pixel to 0x20000
+  uint8_t one_pixel[3] = { 0x20, 0, 0 };
+  NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, one_pixel, sizeof(one_pixel));
+  ...
+  // fill 8 pixels with 0x100010
+  uint8_t pixels[8 * 3];
+  NeoPixel_fill(pixels, sizeof(pixels) * 3, 0x100011);
+  NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, pixels, sizeof(pixels) * 3);
+  ...
+  char tmp;
+  // turn 256 LEDs off without reading the data from tmp
+  // brightness must be 0
+  NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, &tmp, 8 * 256, 0);
+}
+
+```
+
+```c++
+#include <NeoPixelEspEx.h>
+
+#define NEOPIXEL_OUTPUT_PIN 12
+
+NeoPixelEx::Strip<NEOPIXEL_OUTPUT_PIN, 8, NeoPixelEx::GRB, NeoPixelEx::TimingsWS2812> pixels;
+
+void setup() {
+  ...
+  pixels.begin();
+  ...
+  // set all pixels color 0x000000 and update with 0 brightness
+  pixels.clear();
+  ...
+  // set all LEDs to 0x100010 and update with full brightness
+  pixels.fill(0x100010);
+  pixels.show();
+  ...
+}
+
+void loop() {
+  ...
+  // set the color of pixel 1 and 2, and update the LEDs with brightness level 32
+  pixels[0] = 0xff0000;
+  pixels[1] = 0x00ff00;
+  pixels.show(32);
+  ...
+  // turn 256 LEDs off without Strip object or allocating any memory
+  NeoPixelEx::forceClear(256);
+  ...
+}
+
+
 ```
 
 ## Pins ESP8266

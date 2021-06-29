@@ -6,203 +6,257 @@
 #include "NeoPixelEspEx.h"
 #include <core_version.h>
 
-#ifndef NEOPIXEL_OUTPUT_PIN
-#define NEOPIXEL_OUTPUT_PIN 12
-#endif
-
-#ifndef NEOPIXEL_NUM_PIXELS
-#define NEOPIXEL_NUM_PIXELS 2
-#endif
-
-NeoPixelEx::Strip<NEOPIXEL_OUTPUT_PIN, NEOPIXEL_NUM_PIXELS, NeoPixelEx::GRB, NeoPixelEx::TimingsWS2813<F_CPU>::type> pixels;
+NeoPixelEx::Strip<NEOPIXEL_OUTPUT_PIN, NEOPIXEL_NUM_PIXELS, NeoPixelEx::GRB, NEOPIXEL_CHIPSET> pixels;
 
 extern bool record_serial_output;
 extern String serial_output;
 
-#if defined(ESP8266)
-
-extern "C" void custom_crash_callback(struct rst_info *rst_info, uint32_t stack, uint32_t stack_end);
-
-void custom_crash_callback(struct rst_info *rst_info, uint32_t stack, uint32_t stack_end)
-{
-    NeoPixelEx::forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, 256);
-}
-
-#endif
-
 #if 0
+#include <user_interface.h>
 uart_t *_uart;
-
-void preinit() {
+void preinit()
+{
     _uart = uart_init(UART0, 115200, (int) SERIAL_8N1, (int) SERIAL_FULL, 1, 64, false);
-    ::printf("test0\n");
+    ::printf("preinit\n");
 }
 #endif
+
+void help()
+{
+    Serial.print(F(
+        "---\n" \
+        "H  turn all pixels off and halt\n" \
+        "R  reset pixels and values\n" \
+        "C  clear pixels\n" \
+        "t  test all pixels\n" \
+        "+  increase selected value\n" \
+        "-  decrease selected value\n" \
+        "*  increase selected value by 16\n" \
+        "/  decrease selected value by 16\n" \
+        "r  select red value\n" \
+        "b  select blue value\n" \
+        "g  select green value\n" \
+        "B  select brightness\n" \
+        "d  select delay\n" \
+        "S  clear stats\n" \
+        "?  display help\n" \
+        "\n" \
+    ));
+}
 
 void setup()
 {
+#if 0
+    ::printf("setup\n");
+    uart_uninit(_uart);
+#endif
     NeoPixelEx::forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, 256);
     delay(2);
 
     Serial.begin(115200);
     Serial.println(F("Starting..."));
-
+    help();
 
     pixels.begin();
 }
 
-#if 0
 NeoPixelEx::GRB color(0, 0, 0xff);
-uint8_t brightness = 16;
-int direction = 0;
-uint32_t counter = 0;
-
-void loop()
-{
-    pixels.fill(color);
-    pixels.show(brightness);
-    if (brightness == 0 && direction == -1) {
-        direction = 1;
-    }
-    else if (brightness == 0xff && direction == 1) {
-        direction = -1;
-    }
-    brightness += direction;
-    if (++counter >= 100) {
-        counter = 0;
-        color <<= 8;
-        Serial.printf_P(PSTR("%u %s %u/%u\n"), brightness, color.toString().c_str(), NeoPixel_getAbortedFrames, NeoPixel_getFrames);
-    }
-    delay(1000 / 100);
-}
-
-#endif
-
-#if 1
-
-NeoPixelEx::GRB color(0, 0, 0xff);
-uint8_t brightness = 16;
-uint8_t delayMillis = 10;
-uint8_t *ptr = &brightness;
+uint8_t brightness = 10;
+uint8_t delayMillis = 1;
+uint8_t *valuePtr = &brightness;
 
 static PGM_P get_type_str()
 {
-    if (ptr == &brightness) {
+    if (valuePtr == &brightness) {
         return PSTR("brightness");
     }
-    if (ptr == &color.r) {
+    if (valuePtr == &color.r) {
         return PSTR("red");
     }
-    if (ptr == &color.g) {
+    if (valuePtr == &color.g) {
         return PSTR("green");
     }
-    if (ptr == &color.r) {
+    if (valuePtr == &color.b) {
         return PSTR("red");
     }
-    if (ptr == &delayMillis) {
+    if (valuePtr == &delayMillis) {
         return PSTR("delay");
     }
     return PSTR("?");
 }
 
-static uint32_t get_type_incr_key_repeat_timeout = 0;
-
 static int get_type_incr()
 {
-    if (ptr == &brightness) {
-        return get_type_incr_key_repeat_timeout ? std::max(1, *ptr / 32) : 1;
-    }
+    // if (valuePtr == &brightness) {
+    //     return 1;
+    // }
     if (
-        (ptr == &color.r) ||
-        (ptr == &color.g) ||
-        (ptr == &color.r)
+        (valuePtr == &color.r) ||
+        (valuePtr == &color.g) ||
+        (valuePtr == &color.r)
     ) {
-        return 16;//get_type_incr_key_repeat_timeout ? 4 : 1;
+        return 8;
     }
-    if (ptr == &delayMillis) {
-        return 1;
-    }
+    // if (valuePtr == &delayMillis) {
+    //     return 1;
+    // }
     return 1;
+}
+
+static void clear_keys() {
+    while(Serial.available()) {
+        Serial.read();
+    }
+}
+
+static int testAll = -1;
+static int delayMillisOld = -1;
+
+void end_test(const __FlashStringHelper *msg)
+{
+    NeoPixelEx::forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, 256);
+    testAll = -1;
+    if (delayMillisOld != -1) {
+        delayMillis = delayMillisOld;
+        delayMillisOld = -1;
+    }
+    Serial.println(msg);
 }
 
 void loop()
 {
-    if (get_type_incr_key_repeat_timeout && millis() > get_type_incr_key_repeat_timeout) {
-        get_type_incr_key_repeat_timeout = 0;
+    static int counter = 0;
+
+    if (testAll != -1 && counter > 100) {
+        counter = 0;
+        using ColorType = NeoPixelEx::GRB;
+        // test pixels
+        static ColorType onColor;
+
+        auto numRun = testAll / pixels.getNumPixels();
+        auto currentPixelNum = testAll % pixels.getNumPixels();
+        if (currentPixelNum == 0) {
+            if (numRun >= 4) {
+                end_test(F("finished testing"));
+                return;
+            }
+            // change color per run
+            if (testAll % pixels.getNumPixels() == 0) {
+                switch(numRun) {
+                    case 0:
+                        onColor = ColorType(0xff, 0, 0);
+                        break;
+                    case 1:
+                        onColor = ColorType(0, 0xff, 0);
+                        break;
+                    case 2:
+                        onColor = ColorType(0, 0, 0xff);
+                        break;
+                    case 3:
+                        onColor = ColorType(0xff, 0xff, 0xff);
+                        break;
+                }
+            }
+        }
+        ColorType offColor = onColor.inverted();
+        auto &stats = NeoPixelEx::getStats();
+        offColor.setBrightness(128);
+        Serial.printf_P(PSTR("testing color on=%s off=%s pixel=%u/%u run=%u dropped=%u frames=%u fps=%.2f delay=10\n"), onColor.toString().c_str(), offColor.toString().c_str(), currentPixelNum, pixels.getNumPixels(), numRun, stats.getAbortedFrames(), stats.getFrames(), stats.getFps(), delayMillis);
+        pixels.fill(offColor);
+        pixels[currentPixelNum] = onColor;
+        pixels.show(20);
+        testAll++;
     }
-    pixels.fill(color);
-    pixels.show(brightness);
+    else if (testAll == -1) {
+        // display pixels
+        pixels.fill(color);
+        pixels.show(brightness);
+    }
+
+    // serial input handler
     if (Serial.available()) {
+        if (testAll != -1) {
+            end_test(F("testing pixels aborted..."));
+        }
         while(Serial.available()) {
-            switch(Serial.read()) {
+            char ch  = Serial.read();
+            switch(ch) {
+                case 't':
+                    if (delayMillisOld == -1) {
+                        delayMillisOld = delayMillis;
+                    }
+                    delayMillis = 10;
+                    Serial.println(F("testing all pixels\n"));
+                    clear_keys();
+                    testAll = 0;
+                    counter = -1;
+                    NeoPixelEx::getStats().clear();
+                    pixels.clear();
+                    break;
+                case '*':
+                    *valuePtr = std::min<int>(255, *valuePtr + 16);
+                    break;
+                case '/':
+                    *valuePtr = std::max<int>(0, *valuePtr - 16);
+                    break;
                 case '+':
-                    get_type_incr_key_repeat_timeout = millis() + 2000;
-                    *ptr = std::min<int>(255, (uint16_t)*ptr + get_type_incr());
+                    *valuePtr = std::min<int>(255, *valuePtr + get_type_incr());
                     break;
                 case '-':
-                    get_type_incr_key_repeat_timeout = millis() + 2000;
-                    *ptr = std::max<int>(0, (uint16_t)*ptr - get_type_incr());
+                    *valuePtr = std::max<int>(0, *valuePtr - get_type_incr());
                     break;
                 case 'r':
-                    ptr = &color.r;
+                    valuePtr = &color.r;
                     break;
                 case 'b':
-                    ptr = &color.b;
+                    valuePtr = &color.b;
                     break;
                 case 'g':
-                    ptr = &color.g;
+                    valuePtr = &color.g;
                     break;
                 case 'B':
-                    ptr = &brightness;
+                    valuePtr = &brightness;
                     break;
                 case 'd':
-                    ptr = &delayMillis;
+                    valuePtr = &delayMillis;
+                    break;
+                case 'S':
+                    Serial.println(F("clear stat..."));
+                    NeoPixelEx::getStats().clear();
                     break;
                 case 'R':
                     Serial.println(F("reset"));
                     color = NeoPixelEx::GRB(0, 0, 0xff);
                     brightness = 16;
-                    delayMillis = 10;
-                    ptr = &brightness;
+                    delayMillis = 1;
+                    valuePtr = &brightness;
+                    // falltrough
                 case 'C':
                     Serial.println(F("clearing all pixels..."));
                     NeoPixelEx::forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, 256);
-                    Serial.println(F("waiting 5 seconds..."));
-                    delay(5000);
-                    while(Serial.available()) {
-                        Serial.read();
-                    }
+                    Serial.println(F("waiting 3 seconds..."));
+                    delay(3000);
+                    clear_keys();
+                    NeoPixelEx::getStats().clear();
                     break;
-                case 'o':
-                    Serial.println(F("off..."));
+                case 'H':
                     NeoPixelEx::forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, 256);
-                    for(;;) { delay(1000); }
-                    break;
-            #if defined(ESP8266)
-                case 'T':
-                    if (ESP.getCpuFreqMHz() == 80) {
-                        ets_update_cpu_frequency(160);
-                        Serial.println(F("CPU 160MHz"));
-                    }
-                    else {
-                        ets_update_cpu_frequency(80);
-                        Serial.println(F("CPU 80MHz"));
+                    Serial.println(F("halted..."));
+                    for(;;) {
+                        delay(1000);
                     }
                     break;
-                #endif
+                case '?':
+                    help();
+                    break;
+                default:
+                    break;
             }
-            #if DEBUG_RECORD_SERIAL_OUTPUT
-                record_serial_output = true;
-                pixels.show(brightness);
-            #endif
+            const auto &stats = NeoPixelEx::getStats();
+            Serial.printf_P(PSTR("selected=%s step=%u brightness=%u %s dropped=%u frames=%u fps=%.2f delay=%u\n"), get_type_str(), get_type_incr(), brightness, color.toString().c_str(), stats.getAbortedFrames(), stats.getFrames(), stats.getFps(), delayMillis);
         }
-        Serial.printf_P(PSTR("%s step=%u brightness=%u %s %u/%u\n"), get_type_str(), get_type_incr(), brightness, color.toString().c_str(), NeoPixel_getAbortedFrames, NeoPixel_getFrames);
-        #if DEBUG_RECORD_SERIAL_OUTPUT
-                Serial.println(serial_output);
-        #endif
     }
+
     delay(delayMillis);
+    counter++;
 }
-
-
-#endif

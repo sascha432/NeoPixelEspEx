@@ -17,5 +17,12 @@
     "platforms": [
         "espressif8266",
         "espressif32"
-    ]
+    ],
+    "export": {
+        "exclude": [
+            "docs",
+            "lib-extra",
+            "examples"
+        ]
+    }
 }
