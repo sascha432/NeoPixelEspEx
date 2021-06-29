@@ -32,7 +32,13 @@
 #   define NEOPIXEL_ALLOW_INTERRUPTS 1
 #   endif
 // use preching instead of IRAM
+//
 // precaching adds extra overhead to each show() call
+//
+// IRAM usage
+// NEOPIXEL_ALLOW_INTERRUPTS=0 212 byte
+// NEOPIXEL_ALLOW_INTERRUPTS=1 316 byte
+//
 #   ifndef NEOPIXEL_USE_PRECACHING
 #       define NEOPIXEL_USE_PRECACHING 1
 #   endif
@@ -227,7 +233,7 @@ namespace NeoPixelEx {
     public:
     #if NEOPIXEL_ALLOW_INTERRUPTS
 
-        uint32_t getAbortedFrames() const {
+        __attribute__((always_inline)) uint32_t getAbortedFrames() const {
             return _aborted;
         }
 
@@ -236,7 +242,7 @@ namespace NeoPixelEx {
         }
 
     public:
-        uint32_t &__aborted() {
+        __attribute__((always_inline)) uint32_t &__aborted() {
             return _aborted;
         }
 

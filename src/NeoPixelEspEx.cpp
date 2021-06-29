@@ -184,7 +184,7 @@ void NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint8_t pin, uint16_t brightness, uint8
 
 bool espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t period, uint32_t wait, uint32_t minWaitPeriod, uint32_t pinMask, uint32_t *lastDisplayTime)
 {
-#if 1
+#if NEOPIXEL_DEBUG_TRIGGER_PIN>=0 && 1
     NeoPixelEx::NeoPixel_toggleDebugPin();
 #endif
     brightness &= 0xff;

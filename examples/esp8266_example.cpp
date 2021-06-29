@@ -159,9 +159,13 @@ void loop()
             }
         }
         ColorType offColor = onColor.inverted();
-        auto &stats = NeoPixelEx::getStats();
         offColor.setBrightness(128);
-        Serial.printf_P(PSTR("testing color on=%s off=%s pixel=%u/%u run=%u dropped=%u frames=%u fps=%.2f delay=10\n"), onColor.toString().c_str(), offColor.toString().c_str(), currentPixelNum, pixels.getNumPixels(), numRun, stats.getAbortedFrames(), stats.getFrames(), stats.getFps(), delayMillis);
+        #if NEOPIXEL_HAVE_STATS
+            auto &stats = NeoPixelEx::getStats();
+            Serial.printf_P(PSTR("testing color on=%s off=%s pixel=%u/%u run=%u dropped=%u frames=%u fps=%.2f delay=10\n"), onColor.toString().c_str(), offColor.toString().c_str(), currentPixelNum, pixels.getNumPixels(), numRun, stats.getAbortedFrames(), stats.getFrames(), stats.getFps(), delayMillis);
+        #else
+
+        #endif
         pixels.fill(offColor);
         pixels[currentPixelNum] = onColor;
         pixels.show(20);
@@ -190,7 +194,9 @@ void loop()
                     clear_keys();
                     testAll = 0;
                     counter = -1;
-                    NeoPixelEx::getStats().clear();
+                    #if NEOPIXEL_HAVE_STATS
+                        NeoPixelEx::getStats().clear();
+                    #endif
                     pixels.clear();
                     break;
                 case '*':
@@ -222,7 +228,9 @@ void loop()
                     break;
                 case 'S':
                     Serial.println(F("clear stat..."));
-                    NeoPixelEx::getStats().clear();
+                    #if NEOPIXEL_HAVE_STATS
+                        NeoPixelEx::getStats().clear();
+                    #endif
                     break;
                 case 'R':
                     Serial.println(F("reset"));
@@ -237,7 +245,9 @@ void loop()
                     Serial.println(F("waiting 3 seconds..."));
                     delay(3000);
                     clear_keys();
-                    NeoPixelEx::getStats().clear();
+                    #if NEOPIXEL_HAVE_STATS
+                        NeoPixelEx::getStats().clear();
+                    #endif
                     break;
                 case 'H':
                     NeoPixelEx::forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, 256);
@@ -252,8 +262,12 @@ void loop()
                 default:
                     break;
             }
-            const auto &stats = NeoPixelEx::getStats();
-            Serial.printf_P(PSTR("selected=%s step=%u brightness=%u %s dropped=%u frames=%u fps=%.2f delay=%u\n"), get_type_str(), get_type_incr(), brightness, color.toString().c_str(), stats.getAbortedFrames(), stats.getFrames(), stats.getFps(), delayMillis);
+            #if NEOPIXEL_HAVE_STATS
+                const auto &stats = NeoPixelEx::getStats();
+                Serial.printf_P(PSTR("selected=%s step=%u brightness=%u %s dropped=%u frames=%u fps=%.2f delay=%u\n"), get_type_str(), get_type_incr(), brightness, color.toString().c_str(), stats.getAbortedFrames(), stats.getFrames(), stats.getFps(), delayMillis);
+            #else
+                Serial.printf_P(PSTR("selected=%s step=%u brightness=%u %s delay=%u\n"), get_type_str(), get_type_incr(), brightness, color.toString().c_str(), delayMillis);
+            #endif
         }
     }
 
