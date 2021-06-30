@@ -14,6 +14,10 @@
 
 #include "NeoPixelEspEx.h"
 
+#pragma GCC optimize ("O2")
+
+NeoPixelEx::Context NeoPixelEx::_globalContext;
+
 void NeoPixel_fillColor(uint8_t *pixels, uint16_t numBytes, uint32_t color)
 {
     uint8_t *ptr = pixels;
@@ -42,7 +46,7 @@ __attribute__((always_inline)) inline static void gpio_set_level_low(uint8_t pin
         GP16O &= ~1;
     }
     else {
-        GPOC = pinMask;
+        GPOC = pinMask; // 23 cycles incl
     }
 }
 
@@ -80,9 +84,9 @@ __attribute__((always_inline)) inline static uint8_t loadPixel(const uint8_t *&p
 
 __attribute__((always_inline)) inline static uint8_t applyBrightness(uint8_t pixel, uint16_t brightness)
 {
-    if (brightness == 0) {
-        return 0;
-    }
+    // if (brightness == 0) {
+    //     return 0;
+    // }
     return (pixel * brightness) >> 8;
 }
 
@@ -104,7 +108,8 @@ __attribute__((always_inline)) inline static uint8_t applyBrightness(uint8_t pix
 
 #endif
 
-void NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint8_t pin, uint16_t brightness, uint8_t pix, uint8_t mask, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod, uint32_t pinMask, uint32_t invPinMask, uint32_t *lastDisplayTime)
+// extra function to keep the IRAM usage low
+void NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint8_t pin, uint16_t brightness, uint8_t pix, uint8_t mask, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod, uint32_t pinMask, uint32_t invPinMask)
 {
 #if NEOPIXEL_USE_PRECACHING
     PRECACHE_START(NeoPixel_espShow);
@@ -124,9 +129,6 @@ void NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint8_t pin, uint16_t brightness, uint8
         #if NEOPIXEL_ALLOW_INTERRUPTS
             }
             else if (startTime) {
-                #if NEOPIXEL_HAVE_STATS
-                    NeoPixelEx::getStats().__aborted()++;
-                #endif
                 // set period to 0 to remove the wait time and marker for timeout
                 period = 0;
                 break;
@@ -156,9 +158,6 @@ void NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint8_t pin, uint16_t brightness, uint8
             }
             else {
                 gpio_set_level_low(pin, pinMask, invPinMask);
-                #if NEOPIXEL_HAVE_STATS
-                    NeoPixelEx::getStats().__aborted()++;
-                #endif
                 period = 0;
                 break;
             }
@@ -182,13 +181,11 @@ void NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint8_t pin, uint16_t brightness, uint8
 #endif
 }
 
-bool espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t period, uint32_t wait, uint32_t minWaitPeriod, uint32_t pinMask, uint32_t *lastDisplayTime)
+bool espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t period, uint32_t wait, uint32_t minWaitPeriod, uint32_t pinMask, void *contextPtr)
 {
-#if NEOPIXEL_DEBUG_TRIGGER_PIN>=0 && 1
-    NeoPixelEx::NeoPixel_toggleDebugPin();
-#endif
+    auto &context = *reinterpret_cast<NeoPixelEx::Context *>(contextPtr);
     brightness &= 0xff;
-    if (brightness) { // change range to 1-256 to avoid divison in applyBrightness()
+    if (brightness) { // change range to 1-256 to avoid divison by 255 in applyBrightness()
         brightness++;
     }
 
@@ -196,27 +193,24 @@ bool espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const uint8_t *
     pix = applyBrightness(pix, brightness);
     uint8_t mask = 0x80;
 
-    #if NEOPIXEL_HAVE_STATS
-        NeoPixelEx::getStats().__frames()++;
-    #endif
-
-    if (lastDisplayTime) {
-        uint32_t diff = *lastDisplayTime - micros();
-        if (diff < minWaitPeriod) {
-            delayMicroseconds(minWaitPeriod - diff);
-        }
-    }
+    context.waitRefreshTime(minWaitPeriod);
 
     #if defined(ESP8266) && !NEOPIXEL_ALLOW_INTERRUPTS
         ets_intr_lock();
     #endif
 
-    // this part must be in IRAM/ICACHE
-    _espShow(pin, brightness, pix, mask, p, end, time0, time1, period, wait, minWaitPeriod, pinMask, ~pinMask, lastDisplayTime);
+    #if NEOPIXEL_DEBUG
+        context.getDebugContext().togglePin();
+    #endif
 
-    if (lastDisplayTime) {
-        *lastDisplayTime = micros();
-    }
+    // this part must be in IRAM/ICACHE
+    _espShow(pin, brightness, pix, mask, p, end, time0, time1, period, wait, minWaitPeriod, pinMask, ~pinMask);
+
+    #if NEOPIXEL_HAVE_STATS
+        context.getStats().increment(period != 0);
+    #endif
+
+    context.setLastDisplayTime(micros());
 
     #if defined(ESP8266) && !NEOPIXEL_ALLOW_INTERRUPTS
         ets_intr_unlock();
@@ -224,14 +218,3 @@ bool espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const uint8_t *
 
     return (period != 0);
 }
-
-#if NEOPIXEL_HAVE_STATS
-
-NeoPixelEx::Stats NeoPixelEx::stats;
-
-#endif
-
-#if NEOPIXEL_DEBUG_TRIGGER_PIN>=0
-bool NeoPixelEx::_toogleDebugFlag = NeoPixelEx::NeoPixel_initToggleDebugPin();
-#endif
-

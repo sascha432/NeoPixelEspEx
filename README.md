@@ -28,6 +28,8 @@ NeoPixel_espShow(pin, reinterpret_cast<uint8_t *>(pixel_data), sizeof(pixel_data
 
 ## Basic usage
 
+### Legacy functions
+
 It is recommended to use the class `NeoPixelEx::Strip` instead of `NeoPixel_espShow()`.
 
 ```c++
@@ -58,6 +60,8 @@ void loop() {
 }
 
 ```
+
+## Strip class
 
 ```c++
 #include <NeoPixelEspEx.h>
@@ -90,7 +94,20 @@ void loop() {
   NeoPixelEx::forceClear(256);
   ...
 }
+```
 
+### Changing pixel data
+
+`pixels.data()` provides access to the underlying data object. The default is `PixelData` which is an array with some additional functions to manipulare the data.
+
+### DataWrapper
+
+To use existing data with the Strip class, the DataWrapper template can be used. It provides direct access to the data without any additional overhead.
+
+```c++
+
+uint8_t pixelData[NEOPIXEL_NUM_PIXELS * sizeof(NeoPixelEx::GRB)];
+NeoPixelEx::Strip<NEOPIXEL_OUTPUT_PIN, NEOPIXEL_NUM_PIXELS, NeoPixelEx::GRB, NeoPixelEx::TimingsWS2812, DataWrapper<NEOPIXEL_NUM_PIXELS, NeoPixelEx::GRB>> pixels(&pixelData);
 
 ```
 

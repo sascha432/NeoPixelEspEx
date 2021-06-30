@@ -2,6 +2,8 @@
 
 ## Version 0.0.2
 
+- Wrapper class for plain data pointers
+- Context object for each LED strip and global context object for legacy functions
 - Support for espressif8266@3.0.0, 2.6.3 and 2.3.3
 - Templates for timings
 - GRB, RGB and Array types
