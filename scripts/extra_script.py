@@ -31,7 +31,21 @@ def disassemble(source, target, env):
     click.secho('Created: ', fg='yellow', nl=False)
     click.secho(target)
 
-
+def mem_analyzer(source, target, env):
+    # https://github.com/Sermus/ESP8266_memory_analyzer
+    exe = path.abspath(path.join(env.subst("$PROJECT_DIR"), "./scripts/MemAnalyzer.exe"))
+    if not path.isfile(exe):
+        click.secho("%s not found. Check if file exists or has a different name" % exe, fg="yellow")
+        return
+    args = [
+        exe,
+        which('xtensa-lx106-elf-objdump.exe', env)[0],
+        path.realpath(str(target[0]))
+    ]
+    p = subprocess.Popen(args, text=True)
+    p.wait()
 
 env.AlwaysBuild(env.Alias('disasm', [env['PIOMAINPROG']], disassemble))
 env.AlwaysBuild(env.Alias('disassemble', [env['PIOMAINPROG']], disassemble))
+
+env.AddPostAction('$BUILD_DIR/${PROGNAME}.elf', mem_analyzer)
