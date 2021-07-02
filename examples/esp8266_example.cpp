@@ -3,7 +3,8 @@
  */
 
 #include <Arduino.h>
-#include <core_version.h>
+// #include <core_version.h>
+#include <Schedule.h>>
 #include "NeoPixelEspEx.h"
 
 // #define NEOPIXEL_NUM_PIXELS_CLEAR NEOPIXEL_NUM_PIXELS * 2
@@ -63,10 +64,15 @@ void setup()
     forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, NEOPIXEL_NUM_PIXELS_CLEAR);
 
     Serial.begin(115200);
-    Serial.println(F("Starting..."));
-    help();
+    Serial.println(F("starting..."));
 
     pixels.begin();
+
+    schedule_recurrent_function_us([]() {
+        help();
+        return false;
+    }, 5000000);
+
 }
 
 GRB color(0, 0, 0xff);

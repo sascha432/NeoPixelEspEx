@@ -19,11 +19,17 @@ Examples for PlatformIO can be found in the `examples/` folder.
 
 ## FastLED
 
-A workaround for FastLED and v3.0.0 is to replace `FastLED.show()` with `NeoPixel_espShow()`. Only brightness is supported.
+A workaround for FastLED and v3.0.0 is to replace `FastLED.show()` with `Strip::show()`. Only brightness is supported.
 
 ```c++
-CRGB pixel_data[8];
-NeoPixel_espShow(pin, reinterpret_cast<uint8_t *>(pixel_data), sizeof(pixel_data) * sizeof(*pixel_data), FastLED.getBrightness());
+CRGB pixelData[NEOPIXEL_NUM_PIXELS];
+NeoPixelEx::Strip<NEOPIXEL_OUTPUT_PIN, NEOPIXEL_NUM_PIXELS, NeoPixelEx::CRGB, NeoPixelEx::TimingsWS2812, NeoPixelEx::DataWrapper<NEOPIXEL_NUM_PIXELS, NeoPixelEx::CRGB>> pixels(&pixelData);
+
+fill_rainbow(pixelData, pixels.getNumPixels(), beat8(10, 255), 10);
+
+pixels.show(FastLED.getBrightness());
+// or
+FastLED.show();
 ```
 
 ## Basic usage

@@ -1,3 +1,6 @@
 .pio
 lib-extra/*
 .vscode/*
+scripts/MemAnalyzer_.exe
+scripts/MemAnalyzer.exe
+

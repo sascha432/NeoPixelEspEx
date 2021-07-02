@@ -62,9 +62,9 @@
 #   define NEOPIXEL_INTERRUPT_RETRY_COUNT 0
 #endif
 
-#define NEOPIXEL_CHIPSET_WS2811 NeoPixelEx::TimingsWS2811<F_CPU>
-#define NEOPIXEL_CHIPSET_WS2812 NeoPixelEx::TimingsWS2812<F_CPU>
-#define NEOPIXEL_CHIPSET_WS2813 NeoPixelEx::TimingsWS2813<F_CPU>
+#define NEOPIXEL_CHIPSET_WS2811 NeoPixelEx::TimingsWS2811
+#define NEOPIXEL_CHIPSET_WS2812 NeoPixelEx::TimingsWS2812
+#define NEOPIXEL_CHIPSET_WS2813 NeoPixelEx::TimingsWS2813
 
 // default timings for NeoPixel_espShow()
 #ifndef NEOPIXEL_CHIPSET
@@ -76,20 +76,17 @@
 #   define NEOPIXEL_DEBUG_TRIGGER_PIN -1
 #endif
 
-#pragma GCC push_options
-#pragma GCC optimize ("O2")
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t period, uint32_t wait, uint32_t minWaitPeriod, uint32_t pinMask, void *context);
+// void NeoPixel_fillColorGRB(void *pixels, uint16_t numBytes, const NeoPixelEx::GRB &color);
 
 // deprecated legacy function
 // fill pixel data
 // numBytes is 3 per pixel
-// color is 24 bit RGB
-void NeoPixel_fillColor(uint8_t *pixels, uint16_t numBytes, uint32_t color);
+// color is 24 bit GRB
+// void NeoPixel_fillColor(uint8_t *pixels, uint16_t numBytes, uint32_t color);
 
 // show pixels
 // numBytes is 3 per pixel
@@ -99,6 +96,9 @@ bool NeoPixel_espShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uin
 
 #ifdef __cplusplus
 }
+
+#pragma GCC push_options
+#pragma GCC optimize ("O2")
 
 namespace NeoPixelEx {
 
@@ -153,15 +153,18 @@ namespace NeoPixelEx {
         }
     };
 
+    template<uint32_t _FCpu>
+    using _TimingsWS2811 = Timings<500, 1200, 2500, 50, _FCpu>;
+    using TimingsWS2811 = _TimingsWS2811<F_CPU>;
 
     template<uint32_t _FCpu>
-    using TimingsWS2811 = Timings<500, 1200, 2500, 50, _FCpu>;
+    using _TimingsWS2812 = Timings<375, 625, 1250, 250, _FCpu>;
+    // using _TimingsWS2812 = Timings<400, 800, 1250, 50, _FCpu>;
+    using TimingsWS2812 = _TimingsWS2812<F_CPU>;
 
     template<uint32_t _FCpu>
-    using TimingsWS2812 = Timings<400, 800, 1250, 50, _FCpu>;
-
-    template<uint32_t _FCpu>
-    using TimingsWS2813 = Timings<350, 750, 1250, 250, _FCpu>;
+    using _TimingsWS2813 = Timings<350, 750, 1250, 250, _FCpu>;
+    using TimingsWS2812 = _TimingsWS2812<F_CPU>;
 
     using DefaultTimings = NEOPIXEL_CHIPSET;
 
@@ -355,8 +358,37 @@ namespace NeoPixelEx {
         uint32 _lastDisplayTime;
     };
 
+    struct GRBOrder {
+        static constexpr bool kReOrder = true;
+
+        __attribute__((always_inline)) inline static uint8_t get(const uint8_t *ptr, const uint8_t ofs) {
+            switch(ofs) {
+                case 0:
+                    return ptr[1];
+                case 1:
+                    return ptr[-1];
+                case 2:
+                    return *ptr;
+                default:
+                    break;
+            }
+            return 0;
+        }
+    };
+
+    struct RGBOrder {
+        static constexpr bool kReOrder = false;
+
+        __attribute__((always_inline)) inline static uint8_t get(const uint8_t *ptr, const uint8_t ofs) {
+            return *ptr;
+        }
+    };
+
     class GRBType
     {
+    public:
+        using OrderType = RGBOrder;
+
     public:
         GRBType() :
             g(0),
@@ -388,6 +420,9 @@ namespace NeoPixelEx {
     class RGBType
     {
     public:
+        using OrderType = RGBOrder;
+
+    public:
         RGBType() :
             r(0),
             g(0),
@@ -415,10 +450,44 @@ namespace NeoPixelEx {
         uint8_t b;
     };
 
+    class CRGBType
+    {
+    public:
+        using OrderType = GRBOrder;
+
+    public:
+        CRGBType() :
+            r(0),
+            g(0),
+            b(0)
+        {
+        }
+
+        CRGBType(uint32_t rgb) :
+            r(static_cast<uint8_t>(rgb >> 16)),
+            g(static_cast<uint8_t>(rgb >> 8)),
+            b(static_cast<uint8_t>(rgb))
+        {
+        }
+
+        CRGBType(uint8_t red, uint8_t green, uint8_t blue) :
+            r(red),
+            g(green),
+            b(blue)
+        {
+        }
+
+    public:
+        uint8_t r;
+        uint8_t g;
+        uint8_t b;
+    };
+
     template<typename _Type>
-    class Color : public _Type{
+    class Color : public _Type {
     public:
         using type = _Type;
+        using OrderType = typename _Type::OrderType;
 
     public:
         using type::type;
@@ -438,6 +507,10 @@ namespace NeoPixelEx {
 
         uint32_t toRGB() const {
             return (r << 16) | (g << 8) | b;
+        }
+
+        uint32_t toGRB() const {
+            return (r << 8) | (g << 16) | b;
         }
 
         uint8_t red() const {
@@ -515,6 +588,7 @@ namespace NeoPixelEx {
 
     using GRB = Color<GRBType>;
     using RGB = Color<RGBType>;
+    using CRGB = Color<CRGBType>;
 
     // wrapper for any raw pointer
     template<size_t _NumElements, typename _PixelType = GRB>
@@ -650,6 +724,7 @@ namespace NeoPixelEx {
             return data()[index];
         }
 
+        // color is RGB
         void fill(uint32_t color) {
             std::fill(begin(), end(), pixel_type(color));
         }
@@ -658,6 +733,7 @@ namespace NeoPixelEx {
             std::fill(begin(), end(), color);
         }
 
+        // color is RGB
         void fill(uint16_t numPixels, uint32_t color) {
             std::fill_n(data(), numPixels, pixel_type(color));
         }
@@ -666,6 +742,7 @@ namespace NeoPixelEx {
             std::fill_n(data(), numPixels, color);
         }
 
+        // color is RGB
         void fill(uint16_t offset, uint16_t numPixels, uint32_t color) {
             std::fill(data() + offset, data() + numPixels, pixel_type(color));
         }
@@ -678,59 +755,22 @@ namespace NeoPixelEx {
         data_type _data;
     };
 
-
-    template<typename _Chipset = NEOPIXEL_CHIPSET>
-    inline bool internalShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
-    {
-        bool result = false;
-        auto p = pixels;
-        auto end = p + numBytes;
-
-        #if NEOPIXEL_INTERRUPT_RETRY_COUNT > 0
-            uint8_t retries = NEOPIXEL_INTERRUPT_RETRY_COUNT;
-            do {
-        #endif
-                #if defined(ESP8266) && !NEOPIXEL_ALLOW_INTERRUPTS
-                    ets_intr_lock();
-                #endif
-                result = ::espShow(pin, brightness, p, end, _Chipset::getCyclesT0H(), _Chipset::getCyclesT1H(), _Chipset::getCyclesPeriod(), _Chipset::getCyclesRES(), _Chipset::getMinDisplayPeriod(), pin == 16 ? _BV(0) : _BV(pin), &context);
-
-                #if defined(ESP8266) && !NEOPIXEL_ALLOW_INTERRUPTS
-                    ets_intr_unlock();
-                #endif
-        #if NEOPIXEL_INTERRUPT_RETRY_COUNT > 0
-            }
-            while(result != true && retries-- > 0);
-        #endif
-
-        return result;
-    }
-
     // force to clear all pixels without interruptions
     template<typename _Chipset = NEOPIXEL_CHIPSET>
-    inline void forceClear(uint8_t pin, uint16_t numPixels, Context *contextPtr = nullptr)
-    {
-        digitalWrite(pin, LOW);
-        pinMode(pin, OUTPUT);
-
-        #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
-            ets_intr_lock();
-        #endif
-
-        uint8_t buf[1];
-        internalShow<_Chipset>(pin, buf, numPixels * sizeof(GRB), 0, Context::validate(contextPtr));
-
-        #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
-            ets_intr_unlock();
-        #endif
-    }
+    inline void forceClear(uint8_t pin, uint16_t numPixels, Context *contextPtr = nullptr);
 
     #if NEOPIXEL_HAVE_STATS
         NeoPixelEx::Stats &getStats();
     #endif
 
+    template<uint8_t _OutputPin, uint16_t _NumPixels, typename _PixelType = GRB, typename _Chipset = TimingsWS2812, typename _DataType = PixelData<_NumPixels, _PixelType>>
+    class Strip;
+    //<_OutputPin, _NumPixels, _PixelType, _Chipset, _DataType>;
+
+    using StaticStrip = NeoPixelEx::Strip<0, 0, NeoPixelEx::RGB, NeoPixelEx::DefaultTimings>;
+
     // _DataType must provide enough data for _NumPixels * sizeof(_PixelType)
-    template<uint8_t _OutputPin, uint16_t _NumPixels, typename _PixelType = GRB, typename _Chipset = TimingsWS2812<F_CPU>, typename _DataType = PixelData<_NumPixels, _PixelType>>
+    template<uint8_t _OutputPin, uint16_t _NumPixels, typename _PixelType, typename _Chipset, typename _DataType>
     class Strip : public PixelData<_NumPixels, _PixelType>
     {
     public:
@@ -772,8 +812,31 @@ namespace NeoPixelEx {
             _clear(_data.size());
         }
 
-        __attribute__((always_inline)) inline void fill(pixel_type color) {
+        // color is RGB
+        __attribute__((always_inline)) inline void fill(uint32_t color) {
+            _data.fill(pixel_type(color));
+        }
+
+        __attribute__((always_inline)) inline void fill(const pixel_type &color) {
             _data.fill(color);
+        }
+
+        // color is RGB
+        __attribute__((always_inline)) inline void fill(uint16_t numPixels, uint32_t color) {
+            std::fill_n(data(), numPixels, pixel_type(color));
+        }
+
+        __attribute__((always_inline)) inline void fill(uint16_t numPixels, const pixel_type &color) {
+            std::fill_n(data(), numPixels, color);
+        }
+
+        // color is RGB
+        __attribute__((always_inline)) inline void fill(uint16_t offset, uint16_t numPixels, uint32_t color) {
+            std::fill_n(_data.begin() + offset, numPixels, pixel_type(color));
+        }
+
+        __attribute__((always_inline)) inline void fill(uint16_t offset, uint16_t numPixels, const pixel_type &color) {
+            std::fill_n(_data.begin() + offset, numPixels, color);
         }
 
         __attribute__((always_inline)) inline void show(uint8_t brightness = 255) {
@@ -815,6 +878,248 @@ namespace NeoPixelEx {
         }
     #endif
 
+        __attribute__((always_inline)) inline Context &getContext()
+        {
+            return _context;
+        }
+
+    protected:
+
+    #if defined(ESP8266)
+
+        __attribute__((always_inline)) inline static void gpio_set_level_high(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
+        {
+            if (pin == 16) {
+                GP16O |= 1;
+            }
+            else {
+                GPOS = pinMask;
+            }
+        }
+
+        __attribute__((always_inline)) inline static void gpio_set_level_low(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
+        {
+            if (pin == 16) {
+                GP16O &= ~1;
+            }
+            else {
+                GPOC = pinMask;
+            }
+        }
+
+        #else
+
+        __attribute__((always_inline)) inline static void gpio_set_level_high(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
+        {
+            gpio_set_level(pin, true);
+        }
+
+        __attribute__((always_inline)) inline static void gpio_set_level_low(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
+        {
+            gpio_set_level(pin, false);
+        }
+
+    #endif
+
+        __attribute__((always_inline)) inline static uint32_t _getCycleCount(void)
+        {
+            uint32_t cyleCount;
+            __asm__ __volatile__("rsr %0,ccount" : "=a"(cyleCount));
+            return cyleCount;
+        }
+
+    #if NEOPIXEL_HAVE_BRIGHTHNESS
+
+        template<typename _OrderType>
+        __attribute__((always_inline)) inline static uint8_t loadPixel(const uint8_t *&ptr, uint16_t brightness, uint8_t ofs)
+        {
+            if (brightness == 0) {
+                ptr++;
+                return 0;
+            }
+            return _OrderType::get(ptr++, ofs);
+        }
+
+        __attribute__((always_inline)) inline static uint8_t applyBrightness(uint8_t pixel, uint16_t brightness)
+        {
+            if (brightness == 0) {
+                return 0;
+            }
+            return (pixel * brightness) >> 8;
+        }
+
+        #else
+
+        template<typename _OrderType>
+        __attribute__((always_inline)) inline static uint8_t loadPixel(const uint8_t *&ptr, uint16_t brightness, uint8_t ofs)
+        {
+            if (brightness == 0) {
+                ptr++;
+                return 0;
+            }
+            return _OrderType::get(ptr++, ofs);
+        }
+
+        __attribute__((always_inline)) inline static uint8_t applyBrightness(uint8_t pixel, uint16_t brightness)
+        {
+            return pixel;
+        }
+
+        #endif
+
+        // extra function to keep the IRAM usage low
+        template<typename _TChipset, typename _TPixelType>
+        static bool NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint8_t pin, uint16_t brightness, uint8_t pix, uint8_t mask, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod, uint32_t pinMask, uint32_t invPinMask)
+        {
+        #if NEOPIXEL_USE_PRECACHING
+            PRECACHE_START(NeoPixel_espShow);
+        #endif
+            uint32_t startTime = 0;
+            uint32_t c, t;
+            uint8_t ofs = 1;
+
+            for (;;) {
+                t = (pix & mask) ? time1 : time0;
+
+                #if NEOPIXEL_ALLOW_INTERRUPTS
+                    if (((c = _getCycleCount()) - startTime) <= period) {
+                #endif
+                        while (((c = _getCycleCount()) - startTime) < period) {
+                            // wait for bit start
+                        }
+                #if NEOPIXEL_ALLOW_INTERRUPTS
+                    }
+                    else if (startTime) {
+                        // set period to 0 to remove the wait time and marker for timeout
+                        period = 0;
+                        break;
+                    }
+                #endif
+
+                gpio_set_level_high(pin, pinMask, invPinMask);
+                startTime = c; // Save start time
+
+                if (!(mask >>= 1)) {
+                    if (p < end) {
+                        mask = 0x80; // load next byte indicator
+                        if constexpr (_TPixelType::OrderType::kReOrder) {
+                            if (ofs == 2) {
+                                ofs = 0;
+                            }
+                            else {
+                                ofs++;
+                            }
+                            pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs);
+                        }
+                        else {
+                            pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
+                        }
+                    }
+                    else {
+                        mask = 0; // end of frame indicator
+                    }
+                }
+
+                while (((c = _getCycleCount()) - startTime) < t) {
+                    // t0h/t1h wait
+                }
+                gpio_set_level_low(pin, pinMask, invPinMask);
+
+                #if NEOPIXEL_ALLOW_INTERRUPTS
+                    // check if an interrupt caused too much delay
+                    if ((c - startTime) > t) {
+                        period = 0;
+                        break;
+                    }
+                #endif
+
+                if (mask == 0) { // end of frame
+                    break;
+                }
+                if (mask == 0x80) {
+                    pix = applyBrightness(pix, brightness);
+                }
+
+            }
+            while ((_getCycleCount() - startTime) < period) {
+                // t0l/t1l wait
+            }
+
+            return period != 0;
+        #if NEOPIXEL_USE_PRECACHING
+            PRECACHE_END(NeoPixel_espShow);
+        #endif
+        }
+
+        template<typename _TChipset, typename _TPixelType>
+        static bool espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t pinMask, void *contextPtr)
+        {
+            auto &context = *reinterpret_cast<NeoPixelEx::Context *>(contextPtr);
+            brightness &= 0xff;
+            if (brightness) { // change range to 1-256 to avoid divison by 255 in applyBrightness()
+                brightness++;
+            }
+
+            uint8_t pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
+            pix = applyBrightness(pix, brightness);
+            uint8_t mask = 0x80;
+
+            context.waitRefreshTime(_TChipset::getMinDisplayPeriod());
+
+            #if defined(ESP8266) && !NEOPIXEL_ALLOW_INTERRUPTS
+                ets_intr_lock();
+            #endif
+
+            #if NEOPIXEL_DEBUG
+                context.getDebugContext().togglePin();
+            #endif
+
+            uint32_t period = _TChipset::getCyclesPeriod();
+
+            // this part must be in IRAM/ICACHE
+            auto result = _espShow<_TChipset, _TPixelType>(pin, brightness, pix, mask, p, end, _TChipset::getCyclesT0H(), _TChipset::getCyclesT1H(), period, _TChipset::getCyclesRES(), _TChipset::getMinDisplayPeriod(), pinMask, ~pinMask);
+
+            #if NEOPIXEL_HAVE_STATS
+                context.getStats().increment(result);
+            #endif
+
+            context.setLastDisplayTime(micros());
+
+            #if defined(ESP8266) && !NEOPIXEL_ALLOW_INTERRUPTS
+                ets_intr_unlock();
+            #endif
+
+            return result;
+        }
+
+        bool internalShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
+        {
+            return externalShow<_Chipset, _PixelType>(pin, pixels, numBytes, brightness, context);
+        }
+
+    public:
+        template<typename _Chipset2, typename _PixelType2>
+        static inline bool externalShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
+        {
+            bool result = false;
+            auto p = pixels;
+            auto end = p + numBytes;
+
+            #if NEOPIXEL_INTERRUPT_RETRY_COUNT > 0
+                uint8_t retries = NEOPIXEL_INTERRUPT_RETRY_COUNT;
+                do {
+            #endif
+                    result = espShow<_Chipset2, _PixelType2>(pin, brightness, p, end, pin == 16 ? _BV(0) : _BV(pin), &context);
+            #if NEOPIXEL_INTERRUPT_RETRY_COUNT > 0
+                }
+                while(result != true && retries-- > 0);
+            #endif
+
+            return result;
+        }
+
+
+
     private:
         data_type _data;
         Context _context;
@@ -839,18 +1144,48 @@ namespace NeoPixelEx {
         return *reinterpret_cast<Context *>(contextPtr);
     }
 
+    template<typename _Chipset>
+    inline void forceClear(uint8_t pin, uint16_t numPixels, Context *contextPtr)
+    {
+        digitalWrite(pin, LOW);
+        pinMode(pin, OUTPUT);
+
+        #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
+            ets_intr_lock();
+        #endif
+
+        uint8_t buf[1];
+        StaticStrip::externalShow<_Chipset, GRB>(pin, buf, numPixels * sizeof(GRB), 0, Context::validate(contextPtr));
+
+        #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
+            ets_intr_unlock();
+        #endif
+    }
+
 }
 
 extern "C" {
 
+    inline void NeoPixel_fillColorGRB(NeoPixelEx::RGB *pixels, uint16_t numBytes, const NeoPixelEx::RGB &color)
+    {
+        std::fill_n(pixels, numBytes, color);
+    }
+
+    inline void NeoPixel_fillColor(uint8_t *pixels, uint16_t numBytes, uint32_t RGBcolor)
+    {
+        NeoPixel_fillColorGRB(reinterpret_cast<NeoPixelEx::RGB *>(pixels), numBytes / 3, NeoPixelEx::RGB(RGBcolor));
+    }
+
     inline bool NeoPixel_espShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint16_t brightness, void *contextPtr)
     {
-        return NeoPixelEx::internalShow<NeoPixelEx::DefaultTimings>(pin, pixels, numBytes, brightness, NeoPixelEx::Context::validate(contextPtr));
+        return NeoPixelEx::StaticStrip::externalShow<NeoPixelEx::DefaultTimings, NeoPixelEx::GRB>(pin, pixels, numBytes, brightness, NeoPixelEx::Context::validate(contextPtr));
     }
 
 }
 
 #endif
 
-#pragma GCC diagnostic ignored "-Wpragmas" // GCC bug?
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC pop_options
+#pragma GCC diagnostic pop
