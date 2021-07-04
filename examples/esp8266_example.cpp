@@ -4,15 +4,22 @@
 
 #include <Arduino.h>
 // #include <core_version.h>
-#include <Schedule.h>>
+#include <Schedule.h>
+#define FASTLED_INTERNAL
+#define FASTLED_ESP8266_RAW_PIN_ORDER
+#include <FastLED.h>
 #include "NeoPixelEspEx.h"
+// #include "GDBStub.h"
+
+#undef NEOPIXEL_NUM_PIXELS
+#define NEOPIXEL_NUM_PIXELS 100
 
 // #define NEOPIXEL_NUM_PIXELS_CLEAR NEOPIXEL_NUM_PIXELS * 2
 #define NEOPIXEL_NUM_PIXELS_CLEAR NEOPIXEL_NUM_PIXELS + 10
 
 using namespace NeoPixelEx;
 
-Strip<NEOPIXEL_OUTPUT_PIN, NEOPIXEL_NUM_PIXELS, GRB, NEOPIXEL_CHIPSET> pixels;
+Strip<NEOPIXEL_OUTPUT_PIN, NEOPIXEL_NUM_PIXELS, NeoPixelEx::GRB, NEOPIXEL_CHIPSET> pixels;
 
 // example of using the DataWrapper to use any raw pointer with the Strip class
 //
@@ -40,16 +47,21 @@ void help()
         "R  reset pixels and values\n" \
         "C  clear pixels\n" \
         "t  test all pixels\n" \
-        "+  increase selected value\n" \
-        "-  decrease selected value\n" \
-        "*  increase selected value by 16\n" \
-        "/  decrease selected value by 16\n" \
+        "+  increase selected value by step size\n" \
+        "-  decrease selected value by step size\n" \
+        "*  increase step size\n" \
+        "/  decrease step size\n" \
         "r  select red value\n" \
         "b  select blue value\n" \
         "g  select green value\n" \
         "B  select brightness\n" \
         "d  select delay\n" \
         "S  clear stats\n" \
+        "p  next pattern (param1-param3 can be used to modify it)\n" \
+        "P  prev. pattern (param1-param3 can be used to modify it)\n" \
+        "1  select param 1\n" \
+        "2  select param 2\n" \
+        "3  select param 3\n" \
         "?  display help\n" \
         "\n" \
     ));
@@ -75,10 +87,28 @@ void setup()
 
 }
 
-GRB color(0, 0, 0xff);
+NeoPixelEx::GRB color(0, 0, 0xff);
 uint8_t brightness = 10;
 uint8_t delayMillis = 4;
+uint8_t pattern = 0;
+uint8_t stepSize = 1;
+uint8_t param1 = 1;
+uint8_t param2 = 1;
+uint8_t param3 = 1;
 uint8_t *valuePtr = &brightness;
+
+static void default_params() {
+    switch(pattern) {
+        case 1:
+            param1 = 30;
+            param2 = 10;
+            break;
+        case 2:
+            param1 = 10;
+            param2 = 4;
+            break;
+    }
+}
 
 static PGM_P get_type_str()
 {
@@ -97,25 +127,22 @@ static PGM_P get_type_str()
     if (valuePtr == &delayMillis) {
         return PSTR("delay");
     }
-    return PSTR("?");
-}
-
-static int get_type_incr()
-{
-    // if (valuePtr == &brightness) {
-    //     return 1;
-    // }
-    if (
-        (valuePtr == &color.r) ||
-        (valuePtr == &color.g) ||
-        (valuePtr == &color.r)
-    ) {
-        return 8;
+    if (valuePtr == &stepSize) {
+        return PSTR("step size");
     }
-    // if (valuePtr == &delayMillis) {
-    //     return 1;
-    // }
-    return 1;
+    if (valuePtr == &pattern) {
+        return PSTR("pattern");
+    }
+    if (valuePtr == &param1) {
+        return PSTR("param1");
+    }
+    if (valuePtr == &param2) {
+        return PSTR("param2");
+    }
+    if (valuePtr == &param3) {
+        return PSTR("param3");
+    }
+    return PSTR("?");
 }
 
 static void clear_keys() {
@@ -144,7 +171,7 @@ void loop()
 
     if (testAll != -1 && counter > 100) {
         counter = 0;
-        using ColorType = GRB;
+        using ColorType = NeoPixelEx::GRB;
         // test pixels
         static ColorType onColor;
 
@@ -177,7 +204,11 @@ void loop()
         offColor.setBrightness(128);
         #if NEOPIXEL_HAVE_STATS
             auto &stats = pixels.getStats();
-            Serial.printf_P(PSTR("testing color on=%s off=%s pixel=%u/%u run=%u dropped=%u frames=%u fps=%u delay=10\n"), onColor.toString().c_str(), offColor.toString().c_str(), currentPixelNum, pixels.getNumPixels(), numRun, stats.getAbortedFrames(), stats.getFrames(), stats.getFps(), delayMillis);
+            Serial.printf_P(PSTR("testing color on=%s off=%s pixel=%u/%u run=%u dropped=%u (%.1f%%) frames=%u fps=%u delay=10\n"),
+                onColor.toString().c_str(), offColor.toString().c_str(), currentPixelNum, pixels.getNumPixels(), numRun,
+                stats.getAbortedFrames(),  stats.getAbortedFrames() * 100.0 / stats.getFrames(), stats.getFrames(),
+                stats.getFps(), delayMillis
+            );
         #else
 
         #endif
@@ -187,18 +218,35 @@ void loop()
         testAll++;
     }
     else if (testAll == -1) {
-        // display pixels
-        pixels.fill(color);
-
-        // GRB pattern[5] = { color, color.scale(200), color.scale(100), color.scale(75), color.scale(25) };
-        // auto begin = static_cast<uint8_t *>(pixels);
-        // auto end = begin + pixels.getNumBytes();
-        // while(begin + sizeof(pattern) < end) {
-        //     memcpy(begin, pattern, sizeof(pattern));
-        //     begin += sizeof(pattern);
-        // }
-        // std::fill(begin, end, 0);
-
+        EVERY_N_MILLISECONDS(10) {
+            switch(pattern % 4) {
+                case 0:
+                    // display pixels
+                    pixels.fill(color);
+                    break;
+                case 1: {
+                        fill_rainbow(pixels.cast<::CRGB *>(), pixels.getNumPixels(), beat8(param1, 255), param2);
+                    }
+                    break;
+                case 2: {
+                        uint32_t from = 0x00ff00;
+                        uint32_t to = 0xff00ff;
+                        for(auto i = 0; i < pixels.getNumPixels() && i < pixels.getNumPixels(); i += param1) {
+                            fill_gradient_RGB(&pixels.cast<::CRGB *>()[i], pixels.getNumPixels() - i, from, to);
+                            std::swap(from, to);
+                            // auto tmp = NeoPixelEx::GRB(from);
+                            // tmp <<= 4;
+                            // from = tmp.toRGB();
+                            auto tmp = NeoPixelEx::GRB(to);
+                            tmp <<= param2;
+                            to = tmp.toRGB();
+                        }
+                    } break;
+                default:
+                    pixels.fill(0);
+                    break;
+            }
+        }
         pixels.show(brightness);
     }
 
@@ -249,17 +297,35 @@ void loop()
                     #endif
                     pixels.clear();
                     break;
+                case 'p':
+                    pattern++;
+                    default_params();
+                    break;
+                case 'P':
+                    pattern--;
+                    default_params();
+                    break;
                 case '*':
-                    *valuePtr = std::min<int>(255, *valuePtr + 16);
+                    stepSize = std::min(32, stepSize + 1);
                     break;
                 case '/':
-                    *valuePtr = std::max<int>(0, *valuePtr - 16);
+                    stepSize = std::max<int>(1, stepSize - 1);
                     break;
                 case '+':
-                    *valuePtr = std::min<int>(255, *valuePtr + get_type_incr());
+                    if (valuePtr == &pattern || valuePtr == &param1 || valuePtr == &param2 || valuePtr == &param3) {
+                        *valuePtr = std::min<int>(255, *valuePtr + 1);
+                    }
+                    else {
+                        *valuePtr = std::min<int>(255, *valuePtr + stepSize);
+                    }
                     break;
                 case '-':
-                    *valuePtr = std::max<int>(0, *valuePtr - get_type_incr());
+                    if (valuePtr == &pattern || valuePtr == &param1 || valuePtr == &param2 || valuePtr == &param3) {
+                        *valuePtr = std::min<int>(255, *valuePtr - 1);
+                    }
+                    else {
+                        *valuePtr = std::max<int>(0, *valuePtr - stepSize);
+                    }
                     break;
                 case 'r':
                     valuePtr = &color.r;
@@ -277,30 +343,13 @@ void loop()
                     valuePtr = &delayMillis;
                     break;
                 case '1':
-                    if (pixels[0] != 0) {
-                        color = 0;
-                    }
-                    else {
-                        color = 0xffffff;
-                    }
+                    valuePtr = &param1;
                     break;
                 case '2':
-                    if (pixels[0] != 0) {
-                        brightness = 0;
-                    }
-                    else {
-                        brightness = 255;
-                    }
+                    valuePtr = &param2;
                     break;
                 case '3':
-                    if (pixels[0] != 0) {
-                        brightness = 0;
-                        color = 0;
-                    }
-                    else {
-                        brightness = 255;
-                        color = 0xffffff;
-                    }
+                    valuePtr = &param3;
                     break;
                 case 'S':
                     Serial.println(F("clearing stats..."));
@@ -310,7 +359,7 @@ void loop()
                     break;
                 case 'R':
                     Serial.println(F("reset"));
-                    color = GRB(0, 0, 0xff);
+                    color = NeoPixelEx::GRB(0, 0, 0xff);
                     brightness = 16;
                     delayMillis = 1;
                     valuePtr = &brightness;
@@ -340,9 +389,13 @@ void loop()
             }
             #if NEOPIXEL_HAVE_STATS
                 const auto &stats = pixels.getStats();
-                Serial.printf_P(PSTR("selected=%s step=%u brightness=%u %s dropped=%u frames=%u fps=%u delay=%u\n"), get_type_str(), get_type_incr(), brightness, color.toString().c_str(), stats.getAbortedFrames(), stats.getFrames(), stats.getFps(), delayMillis);
+                Serial.printf_P(PSTR("selected=%s value=%u brightness=%u %s dropped=%u (%.1f%%) frames=%u fps=%u delay=%u\n"),
+                    get_type_str(), *valuePtr, brightness, color.toString().c_str(),
+                    stats.getAbortedFrames(),  stats.getAbortedFrames() * 100.0 / stats.getFrames(), stats.getFrames(),
+                    stats.getFps(), delayMillis
+                );
             #else
-                Serial.printf_P(PSTR("selected=%s step=%u brightness=%u %s delay=%u\n"), get_type_str(), get_type_incr(), brightness, color.toString().c_str(), delayMillis);
+                Serial.printf_P(PSTR("selected=%s value=%u brightness=%u %s delay=%u\n"), get_type_str(), *valuePtr, brightness, color.toString().c_str(), delayMillis);
             #endif
         }
     }

@@ -76,6 +76,11 @@
 #   define NEOPIXEL_DEBUG_TRIGGER_PIN -1
 #endif
 
+// toggle this pin when the show() method was interrupted
+#ifndef NEOPIXEL_DEBUG_TRIGGER_PIN2
+#   define NEOPIXEL_DEBUG_TRIGGER_PIN2 -1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -103,10 +108,10 @@ bool NeoPixel_espShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uin
 namespace NeoPixelEx {
 
     // timits in nano seconds
-    template<uint32_t _T0H, uint32_t _T1H, uint32_t _TPeriod, uint32_t _TReset, uint32_t _FCpu/*Hz or MHz*/>
+    template<uint32_t _T0H, uint32_t _T1H, uint32_t _TPeriod, uint32_t _TReset, uint32_t _MinDisplayPeriod, uint32_t _FCpu/*Hz or MHz*/>
     class Timings {
     public:
-        using type = Timings<_T0H, _T1H, _TPeriod, _TReset, _FCpu>;
+        using type = Timings<_T0H, _T1H, _TPeriod, _TReset, _MinDisplayPeriod, _FCpu>;
         using cpu_frequency_t = uint8_t;
 
     public:
@@ -130,7 +135,7 @@ namespace NeoPixelEx {
         static constexpr uint32_t kCyclesT1H = kNanosToCycles(_T1H);
         static constexpr uint32_t kCyclesPeriod = kNanosToCycles(_TPeriod);
         static constexpr uint32_t kCyclesRES = kNanosToCycles(_TReset);
-        static constexpr uint32_t kMinDisplayPeriod = _TPeriod + _TReset;
+        static constexpr uint32_t kMinDisplayPeriod = _MinDisplayPeriod;
 
         static constexpr uint32_t getCyclesT0H() {
             return kNanosToCycles(_T0H);
@@ -154,16 +159,16 @@ namespace NeoPixelEx {
     };
 
     template<uint32_t _FCpu>
-    using _TimingsWS2811 = Timings<500, 1200, 2500, 50, _FCpu>;
+    using _TimingsWS2811 = Timings<500, 1200, 2500, 50, 2750, _FCpu>;
     using TimingsWS2811 = _TimingsWS2811<F_CPU>;
 
     template<uint32_t _FCpu>
-    using _TimingsWS2812 = Timings<375, 625, 1250, 250, _FCpu>;
+    using _TimingsWS2812 = Timings<400, 800, 1250, 50, 1275, _FCpu>;
     // using _TimingsWS2812 = Timings<400, 800, 1250, 50, _FCpu>;
     using TimingsWS2812 = _TimingsWS2812<F_CPU>;
 
     template<uint32_t _FCpu>
-    using _TimingsWS2813 = Timings<350, 750, 1250, 250, _FCpu>;
+    using _TimingsWS2813 = Timings<350, 750, 1250, 250, 1500, _FCpu>;
     using TimingsWS2812 = _TimingsWS2812<F_CPU>;
 
     using DefaultTimings = NEOPIXEL_CHIPSET;
@@ -254,39 +259,57 @@ namespace NeoPixelEx {
     static constexpr uint8_t kInvalidPin = 0xff;
 
     public:
-        DebugContext(uint8_t pin = kInvalidPin) :
-            _pin(kInvalidPin),
-            _enabled(false),
-            _state(false)
+        DebugContext(uint8_t pin = kInvalidPin, uint8_t pin2 = kInvalidPin) :
+            _pin(pin),
+            _pin2(pin2),
+            _states{},
+            _enabled(false)
         {
-            begin(pin);
+            begin();
         }
 
-        void begin(uint8_t pin) {
+        void begin(uint8_t pin, uint8_t pin2 = kInvalidPin) {
             end();
             _pin = pin;
-            if (_pin != kInvalidPin) {
-                digitalWrite(_pin, _state);
-                pinMode(_pin, OUTPUT);
+            _pin2 = pin2;
+            begin();
+        }
+
+        void begin() {
+            end();
+            auto *ptr = _states;
+            uint8_t pins[] = { _pin, _pin2 };
+            for(auto pin: pins) {
+                if (pin == kInvalidPin) {
+                    continue;
+                }
+                digitalWrite(pin, *ptr++);
+                pinMode(pin, OUTPUT);
                 _enabled = true;
             }
         }
 
         void end() {
-            _state = false;
+            std::fill_n(_states, sizeof(_states), false);
             _enabled = false;
-            if (_pin != kInvalidPin) {
-                digitalWrite(_pin, _state);
-                pinMode(_pin, INPUT);
-                _pin = kInvalidPin;
+            auto *ptr = _states;
+            uint8_t pins[] = { _pin, _pin2 };
+            for(auto &pin: pins) {
+                if (pin == kInvalidPin) {
+                    continue;
+                }
+                digitalWrite(pin, *ptr++);
+                pinMode(pin, INPUT);
+                pin = kInvalidPin;
             }
         }
 
         void togglePin() {
+            auto &state = _states[0];
             if (_enabled) {
-                _state = !_state;
+                state = !state;
                 #if defined(ESP8266)
-                    if (_state) {
+                    if (state) {
                         GPOC = _BV(_pin);
                     }
                     else {
@@ -298,17 +321,42 @@ namespace NeoPixelEx {
             }
         }
 
+        void togglePin2() {
+            auto &state = _states[1];
+            if (_enabled) {
+                state = !state;
+                #if defined(ESP8266)
+                    if (state) {
+                        GPOC = _BV(_pin2);
+                    }
+                    else {
+                        GPOS = _BV(_pin2);
+                    }
+                #else
+                    digitalWrite(_pin2, state);
+                #endif
+            }
+        }
+
+    private:
+        bool &_getState(uint8_t n) {
+            return _states[n];
+        }
+
     private:
         uint8_t _pin;
+        uint8_t _pin2;
+        bool _states[4];
         bool _enabled;
-        bool _state;
     };
 
     class Context {
     public:
         Context() :
-            #if NEOPIXEL_DEBUG && (NEOPIXEL_DEBUG_TRIGGER_PIN >= 0)
-                _debug(NEOPIXEL_DEBUG_TRIGGER_PIN),
+            #if NEOPIXEL_DEBUG
+                #if (NEOPIXEL_DEBUG_TRIGGER_PIN >= 0)
+                    _debug(NEOPIXEL_DEBUG_TRIGGER_PIN, NEOPIXEL_DEBUG_TRIGGER_PIN2),
+                #endif
             #endif
             _lastDisplayTime(0)
         {
@@ -359,16 +407,14 @@ namespace NeoPixelEx {
     };
 
     struct GRBOrder {
-        static constexpr bool kReOrder = true;
-
         __attribute__((always_inline)) inline static uint8_t get(const uint8_t *ptr, const uint8_t ofs) {
             switch(ofs) {
                 case 0:
-                    return ptr[1];
-                case 1:
-                    return ptr[-1];
-                case 2:
                     return *ptr;
+                case 1:
+                    return ptr[1];
+                case 2:
+                    return ptr[-1];
                 default:
                     break;
             }
@@ -377,8 +423,6 @@ namespace NeoPixelEx {
     };
 
     struct RGBOrder {
-        static constexpr bool kReOrder = false;
-
         __attribute__((always_inline)) inline static uint8_t get(const uint8_t *ptr, const uint8_t ofs) {
             return *ptr;
         }
@@ -388,6 +432,8 @@ namespace NeoPixelEx {
     {
     public:
         using OrderType = RGBOrder;
+
+        static constexpr bool kReOrder = false;
 
     public:
         GRBType() :
@@ -422,6 +468,8 @@ namespace NeoPixelEx {
     public:
         using OrderType = RGBOrder;
 
+        static constexpr bool kReOrder = false;
+
     public:
         RGBType() :
             r(0),
@@ -454,6 +502,8 @@ namespace NeoPixelEx {
     {
     public:
         using OrderType = GRBOrder;
+
+        static constexpr bool kReOrder = true;
 
     public:
         CRGBType() :
@@ -867,6 +917,24 @@ namespace NeoPixelEx {
             return _data;
         }
 
+        template<typename _Ta>
+        __attribute__((always_inline)) inline _Ta cast() {
+            return (_Ta)ptr();
+        }
+
+        template<typename _Ta>
+        __attribute__((always_inline)) inline _Ta cast() const {
+            return (_Ta)ptr();
+        }
+
+        __attribute__((always_inline)) inline void *ptr() {
+            return (void *)_data.data();
+        }
+
+        __attribute__((always_inline)) inline void *ptr() const {
+            return (const void *)_data.data();
+        }
+
         __attribute__((always_inline)) inline const data_type &data() const {
             return _data;
         }
@@ -940,6 +1008,15 @@ namespace NeoPixelEx {
             return _OrderType::get(ptr++, ofs);
         }
 
+        __attribute__((always_inline)) inline static uint8_t loadPixel(const uint8_t *&ptr, uint16_t brightness)
+        {
+            if (brightness == 0) {
+                ptr++;
+                return 0;
+            }
+            return *ptr++;
+        }
+
         __attribute__((always_inline)) inline static uint8_t applyBrightness(uint8_t pixel, uint16_t brightness)
         {
             if (brightness == 0) {
@@ -958,6 +1035,14 @@ namespace NeoPixelEx {
                 return 0;
             }
             return _OrderType::get(ptr++, ofs);
+        }
+
+        __attribute__((always_inline)) inline static uint8_t applyBrightness(uint8_t pixel, uint16_t brightness)
+        {
+            if (brightness == 0) {
+                return 0;
+            }
+            return (pixel * brightness) >> 8;
         }
 
         __attribute__((always_inline)) inline static uint8_t applyBrightness(uint8_t pixel, uint16_t brightness)
@@ -982,7 +1067,8 @@ namespace NeoPixelEx {
                 t = (pix & mask) ? time1 : time0;
 
                 #if NEOPIXEL_ALLOW_INTERRUPTS
-                    if (((c = _getCycleCount()) - startTime) <= period) {
+                    // check first if we have a timeout
+                    if (((c = _getCycleCount()) - startTime) <= period + (uint8_t)microsecondsToClockCycles(0.6)) {
                 #endif
                         while (((c = _getCycleCount()) - startTime) < period) {
                             // wait for bit start
@@ -1002,7 +1088,7 @@ namespace NeoPixelEx {
                 if (!(mask >>= 1)) {
                     if (p < end) {
                         mask = 0x80; // load next byte indicator
-                        if constexpr (_TPixelType::OrderType::kReOrder) {
+                        if constexpr (_TPixelType::kReOrder) {
                             if (ofs == 2) {
                                 ofs = 0;
                             }
@@ -1012,7 +1098,7 @@ namespace NeoPixelEx {
                             pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs);
                         }
                         else {
-                            pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
+                            pix = loadPixel(p, brightness);
                         }
                     }
                     else {
@@ -1026,8 +1112,11 @@ namespace NeoPixelEx {
                 gpio_set_level_low(pin, pinMask, invPinMask);
 
                 #if NEOPIXEL_ALLOW_INTERRUPTS
-                    // check if an interrupt caused too much delay
-                    if ((c - startTime) > t) {
+                    // check if we had a timeout during the TxH phase
+                    if ((c - startTime) > t + (uint8_t)microsecondsToClockCycles(0.3)) {
+                        #if NEOPIXEL_DEBUG
+                            Context::validate(nullptr).getDebugContext().togglePin2();
+                        #endif
                         period = 0;
                         break;
                     }
@@ -1060,7 +1149,14 @@ namespace NeoPixelEx {
                 brightness++;
             }
 
-            uint8_t pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
+
+            uint8_t pix;
+            if constexpr (_TPixelType::kReOrder) {
+                pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
+            }
+            else {
+                pix = loadPixel(p, brightness);
+            }
             pix = applyBrightness(pix, brightness);
             uint8_t mask = 0x80;
 

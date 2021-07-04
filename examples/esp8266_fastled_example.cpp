@@ -9,14 +9,14 @@
 #include <Schedule.h>
 #include <ESP8266WiFi.h>
 
-
 #undef NEOPIXEL_NUM_PIXELS
 #define NEOPIXEL_NUM_PIXELS 250
 
+// NeoPixelEx::CRGB is pretty slow compared to RGB/GRB
 CRGB pixelData[NEOPIXEL_NUM_PIXELS];
 NeoPixelEx::Strip<NEOPIXEL_OUTPUT_PIN, NEOPIXEL_NUM_PIXELS, NeoPixelEx::CRGB, NeoPixelEx::TimingsWS2812, NeoPixelEx::DataWrapper<NEOPIXEL_NUM_PIXELS, NeoPixelEx::CRGB>> pixels(&pixelData);
 bool useFastLEDShow = true;
-int stepSize = 8;
+int stepSize = 4;
 int bpm = 10;
 int mainLoopDelay = 5;
 int powerLimit = 1500; // mW
@@ -73,9 +73,9 @@ void setup()
     NeoPixelEx::forceClear(NEOPIXEL_OUTPUT_PIN, 256);
 
     FastLED.addLeds<WS2812, NEOPIXEL_OUTPUT_PIN, GRB>(pixelData, NEOPIXEL_NUM_PIXELS);
-#if NEOPIXEL_NUM_PIXELS < 100
+// #if NEOPIXEL_NUM_PIXELS < 100
     FastLED.setMaxPowerInVoltsAndMilliamps(5, powerLimit / 5);
-#endif
+// #endif
 
     FastLED.setBrightness(10);
     FastLED.setDither(dithering);
@@ -109,6 +109,9 @@ void setup()
     for(uint16_t i = 0; i < pixels.getNumPixels(); i += 10) {
         pixels.fill(i, 10, color);
         color <<= 8;
+        if (i % 30 == 20) {
+            color.setBrightness(200);
+        }
     }
 
     WiFi.onEvent([](WiFiEvent_t event) {
@@ -138,12 +141,17 @@ void loop()
     // delay(1000);
     // colorx.invert();
     // Serial.printf("%u %u\n", pixels.getNumBytes(), cycles);
-    EVERY_N_MILLISECONDS(500) {
-        color <<= 8;
-        pixels[5] = color;
-        pixels[15] = color;
-        pixels[25] = color;
+
+    EVERY_N_MILLISECONDS(10) {
+        fill_rainbow(pixelData, pixels.getNumPixels(), beat8(bpm, 255), 10);
     }
+
+    // EVERY_N_MILLISECONDS(500) {
+    //     color <<= 8;
+    //     pixels[5] = color;
+    //     pixels[15] = color;
+    //     pixels[25] = color;
+    // }
 
     show();
     // _delay(mainLoopDelay);
@@ -210,4 +218,3 @@ void loop()
         }
     }
 }
-
