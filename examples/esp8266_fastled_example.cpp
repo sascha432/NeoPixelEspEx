@@ -9,17 +9,25 @@
 #include <Schedule.h>
 #include <ESP8266WiFi.h>
 
-#undef NEOPIXEL_NUM_PIXELS
-#define NEOPIXEL_NUM_PIXELS 250
+// to test with an active WiFi connection, add SSID and password or put credentials into ../../wifi.h
+// #define WIFI_SSID "SSID"
+// #define WIFI_PASS "123"
+#ifndef WIFI_SSID
+    #include "../../wifi.h"
+#endif
 
-// NeoPixelEx::CRGB is pretty slow compared to RGB/GRB
+#undef NEOPIXEL_NUM_PIXELS
+#define NEOPIXEL_NUM_PIXELS 64
+
+
 CRGB pixelData[NEOPIXEL_NUM_PIXELS];
+// NeoPixelEx::CRGB requires more CPU cycles than NeoPixelEx::GRB
 NeoPixelEx::Strip<NEOPIXEL_OUTPUT_PIN, NEOPIXEL_NUM_PIXELS, NeoPixelEx::CRGB, NeoPixelEx::TimingsWS2812, NeoPixelEx::DataWrapper<NEOPIXEL_NUM_PIXELS, NeoPixelEx::CRGB>> pixels(&pixelData);
 bool useFastLEDShow = true;
 int stepSize = 4;
 int bpm = 10;
 int mainLoopDelay = 5;
-int powerLimit = 1500; // mW
+int powerLimit = 2500; // mW
 bool dithering = false;
 
 NeoPixelEx::Context context;
@@ -34,15 +42,15 @@ static void show()
     }
 }
 
-static void _delay(int millis)
-{
-    if (useFastLEDShow) {
-        FastLED.delay(millis);
-    }
-    else {
-        delay(millis);
-    }
-}
+// static void _delay(int millis)
+// {
+//     if (useFastLEDShow) {
+//         FastLED.delay(millis);
+//     }
+//     else {
+//         delay(millis);
+//     }
+// }
 
 static void help()
 {
@@ -53,6 +61,7 @@ static void help()
         "*      increase step size\n"
         "/      decrease step size\n"
         "0-9    set bpm from 10-100\n"
+        "p      change pattern\n"
         "d      toggle display method\n"
         "D      enable/disable dithering\n"
         "w      connect to WiFi\n"
@@ -65,6 +74,34 @@ static void help()
 
 extern uint32_t test_value;
 uint32_t test_value;
+int pattern = 0;
+
+void update_pattern() {
+    switch(pattern % 2) {
+        case 0: {
+                pixels.fill(0, 10, 0x202020);
+                pixels.fill(50, 10, 0x000001);
+                pixels[0] = 0xff7f00;
+                pixels[1] = 0xff0000;
+                pixels[10] = 0xff0000;
+                pixels[15] = 0x0000ff;
+                pixels[25] = 0x00ff00;
+
+                NeoPixelEx::GRB color(0x0000ff);
+                for(uint16_t i = 0; i < pixels.getNumPixels(); i += 10) {
+                    pixels.fill(i, 10, color);
+                    color <<= 8;
+                    if (i % 30 == 20) {
+                        color.setBrightness(200);
+                    }
+                }
+            }
+            break;
+        case 1: {
+                fill_rainbow(pixelData, pixels.getNumPixels(), beat8(10, 255), 10);
+            } break;
+    }
+}
 
 void setup()
 {
@@ -93,27 +130,9 @@ void setup()
         return true;
     }, 5 * 1000 * 1000);
 
+    update_pattern();
 
-    pinMode(15, OUTPUT);
-
-    pixels.fill(0, 10, 0x202020);
-    pixels.fill(50, 10, 0x000001);
-    pixels[0] = 0xff7f00;
-    pixels[1] = 0xff0000;
-    pixels[10] = 0xff0000;
-    pixels[15] = 0x0000ff;
-    pixels[25] = 0x00ff00;
-
-
-    NeoPixelEx::GRB color(0x0000ff);
-    for(uint16_t i = 0; i < pixels.getNumPixels(); i += 10) {
-        pixels.fill(i, 10, color);
-        color <<= 8;
-        if (i % 30 == 20) {
-            color.setBrightness(200);
-        }
-    }
-
+    WiFi.persistent(false);
     WiFi.onEvent([](WiFiEvent_t event) {
         Serial.printf_P(PSTR("WiFi event: %u\n"), event);
         if (event == WIFI_EVENT_STAMODE_GOT_IP) {
@@ -129,33 +148,10 @@ NeoPixelEx::CRGB color(0xff0000);
 
 void loop()
 {
-    // fill_rainbow(pixelData, pixels.getNumPixels(), beat8(bpm, 255), 10);
-    // fill_gradient_RGB(pixelData, pixels.getNumPixels(), CRGB(0x0000ff), CRGB(0xff0000));
-
-    // uint32_t c = esp_get_cycle_count();
-    // // NeoPixel_fillColor(reinterpret_cast<uint8_t *>(&pixelData[0]), pixels.getNumBytes(), colorx.toRGB()); // 775
-    // // fill_solid(pixelData, pixels.getNumPixels(), colorx.toRGB());//1486
-    // pixels.fill(colorx); //668
-    // // fill_solid(pixelData, pixels.getNumPixels(), colorx.toRGB());
-    // uint32_t cycles = esp_get_cycle_count() - c;
-    // delay(1000);
-    // colorx.invert();
-    // Serial.printf("%u %u\n", pixels.getNumBytes(), cycles);
-
     EVERY_N_MILLISECONDS(10) {
-        fill_rainbow(pixelData, pixels.getNumPixels(), beat8(bpm, 255), 10);
+        update_pattern();
     }
-
-    // EVERY_N_MILLISECONDS(500) {
-    //     color <<= 8;
-    //     pixels[5] = color;
-    //     pixels[15] = color;
-    //     pixels[25] = color;
-    // }
-
     show();
-    // _delay(mainLoopDelay);
-    delayMicroseconds(100);
 
     if (Serial.available()) {
         int ch;
@@ -175,6 +171,9 @@ void loop()
             case '-':
                 FastLED.setBrightness(std::max<int>(0, FastLED.getBrightness() - stepSize));
                 Serial.printf_P(PSTR("brightness: %u\n"), FastLED.getBrightness());
+                break;
+            case 'p':
+                pattern++;
                 break;
             case '0':
             case '1':
@@ -199,7 +198,6 @@ void loop()
                 Serial.printf_P(PSTR("display method: %s\n"), useFastLEDShow ? PSTR("FastLED") : PSTR("NeoPixel"));
                 break;
             case 'w':
-                #include "../../wifi.h"
                 Serial.printf_P(PSTR("WiFi status: %u\n(re)connecting WiFi...\n"), WiFi.status());
                 WiFi.disconnect();
                 WiFi.setAutoConnect(true);

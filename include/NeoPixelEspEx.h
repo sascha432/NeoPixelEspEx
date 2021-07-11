@@ -817,7 +817,7 @@ namespace NeoPixelEx {
     class Strip;
     //<_OutputPin, _NumPixels, _PixelType, _Chipset, _DataType>;
 
-    using StaticStrip = NeoPixelEx::Strip<0, 0, NeoPixelEx::RGB, NeoPixelEx::DefaultTimings>;
+    using StaticStrip = Strip<0, 0, RGB, DefaultTimings>;
 
     // _DataType must provide enough data for _NumPixels * sizeof(_PixelType)
     template<uint8_t _OutputPin, uint16_t _NumPixels, typename _PixelType, typename _Chipset, typename _DataType>
@@ -1247,13 +1247,13 @@ namespace NeoPixelEx {
     {
         digitalWrite(pin, LOW);
         pinMode(pin, OUTPUT);
+        delayMicroseconds(100);
 
         #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
             ets_intr_lock();
         #endif
 
-        uint8_t buf[1];
-        StaticStrip::externalShow<_Chipset, GRB>(pin, buf, numPixels * sizeof(GRB), 0, Context::validate(contextPtr));
+        StaticStrip::externalShow<_Chipset, GRB>(pin, nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr));
 
         #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
             ets_intr_unlock();

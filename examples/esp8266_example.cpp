@@ -9,7 +9,6 @@
 #define FASTLED_ESP8266_RAW_PIN_ORDER
 #include <FastLED.h>
 #include "NeoPixelEspEx.h"
-// #include "GDBStub.h"
 
 #undef NEOPIXEL_NUM_PIXELS
 #define NEOPIXEL_NUM_PIXELS 100
@@ -78,6 +77,10 @@ void setup()
     Serial.begin(115200);
     Serial.println(F("starting..."));
 
+    // pinMode(2,OUTPUT);
+    // gdbstub_init();
+
+
     pixels.begin();
 
     schedule_recurrent_function_us([]() {
@@ -90,10 +93,10 @@ void setup()
 NeoPixelEx::GRB color(0, 0, 0xff);
 uint8_t brightness = 10;
 uint8_t delayMillis = 4;
-uint8_t pattern = 0;
+uint8_t pattern = 1;
 uint8_t stepSize = 1;
-uint8_t param1 = 1;
-uint8_t param2 = 1;
+uint8_t param1 = 10;
+uint8_t param2 = 10;
 uint8_t param3 = 1;
 uint8_t *valuePtr = &brightness;
 
@@ -168,6 +171,12 @@ void end_test(const __FlashStringHelper *msg)
 void loop()
 {
     static int counter = 0;
+
+    EVERY_N_MILLIS(250) {
+        static bool toggle;
+        toggle = !toggle;
+        digitalWrite(2, toggle);
+    }
 
     if (testAll != -1 && counter > 100) {
         counter = 0;
