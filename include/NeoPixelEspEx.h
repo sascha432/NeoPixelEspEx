@@ -1095,7 +1095,7 @@ namespace NeoPixelEx {
                             else {
                                 ofs++;
                             }
-                            pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs);
+
                         }
                         else {
                             pix = loadPixel(p, brightness);
@@ -1126,6 +1126,9 @@ namespace NeoPixelEx {
                     break;
                 }
                 if (mask == 0x80) {
+                    if constexpr (_TPixelType::kReOrder) {
+                        pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs);
+                    }
                     pix = applyBrightness(pix, brightness);
                 }
 
@@ -1148,7 +1151,6 @@ namespace NeoPixelEx {
             if (brightness) { // change range to 1-256 to avoid divison by 255 in applyBrightness()
                 brightness++;
             }
-
 
             uint8_t pix;
             if constexpr (_TPixelType::kReOrder) {
