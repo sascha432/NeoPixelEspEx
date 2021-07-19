@@ -1,17 +1,15 @@
 # NeoPixelEspEx
 
-Library for WS281x and compatible LEDs for ESP8266 and ESP32. It can be used as slim standalone version or together with FastLED, which currently does not work properly with `framework-arduinoespressif8266 3.0.0`
+Library for WS281x and compatible LEDs for ESP8266 and ESP32. It can be used as slim standalone version or together with FastLED, <s>which currently does not work properly with `framework-arduinoespressif8266 3.0.0`</s> The current master branch fixes the issue.
 
 ## Features
 
 - Support for ESP8266/GPIO16
-- Support for ESP32
-- Option for ESP8266 to use precaching instead of IRAM
+- Option to use precaching instead of IRAM
 - Support for brightness scaling
 - Support for interrupts and retries if interrupted (ESP8266)
-- Support for GRB, RGB and other types
+- Support for GRB, RGB, CRGB (FastLED) and other types
 - Function to safely clear pixels without allocating any memory, for example during boot, restart, crash...
-- Can be integrated into FastLED instead of show() or used as slim standalone version that does not need IRAM
 
 ## Examples
 
@@ -31,6 +29,7 @@ pixels.show(FastLED.getBrightness());
 // or
 FastLED.show();
 ```
+
 
 ## Basic usage
 
@@ -54,15 +53,14 @@ void loop() {
   uint8_t one_pixel[3] = { 0x20, 0, 0 };
   NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, one_pixel, sizeof(one_pixel));
   ...
-  // fill 8 pixels with 0x100010
+  // fill 8 pixels with color #220011 and display
   uint8_t pixels[8 * 3];
-  NeoPixel_fill(pixels, sizeof(pixels) * 3, 0x100011);
-  NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, pixels, sizeof(pixels) * 3);
+  NeoPixel_fill(pixels, sizeof(pixels), 0x220011);
+  NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, pixels, sizeof(pixels));
   ...
-  char tmp;
   // turn 256 LEDs off without reading the data from tmp
   // brightness must be 0
-  NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, &tmp, 8 * 256, 0);
+  NeoPixel_espShow(NEOPIXEL_OUTPUT_PIN, nullptr, 3 * 256, 0);
 }
 
 ```
@@ -97,6 +95,7 @@ void loop() {
   pixels.show(32);
   ...
   // turn 256 LEDs off without Strip object or allocating any memory
+  // NeoPixelEx::DefaultTimings is used
   NeoPixelEx::forceClear(256);
   ...
 }
@@ -139,14 +138,13 @@ Usable pins for LED strips. Depending on the levelshifter, GPIO 1, 3, 9 and 10 c
 
 ## Based on NeoPixel_esp
 
-This library is an extended version based on
+This library is based on
 
 ```c++
 // This is a mash-up of the Due show() code + insights from Michael Miller's
 // ESP8266 work for the NeoPixelBus library: github.com/Makuna/NeoPixelBus
 ```
-
 and
 
-(https://github.com/adafruit/Adafruit_NeoPixel/blob/master/esp8266.c)[https://github.com/adafruit/Adafruit_NeoPixel/blob/master/esp8266.c]
+[https://github.com/adafruit/Adafruit_NeoPixel/blob/master/esp8266.c](https://github.com/adafruit/Adafruit_NeoPixel/blob/master/esp8266.c)
 

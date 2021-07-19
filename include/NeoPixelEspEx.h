@@ -81,6 +81,15 @@
 #   define NEOPIXEL_DEBUG_TRIGGER_PIN2 -1
 #endif
 
+#if GCC < 10
+#   define __CONSTEXPR
+#else
+#   define __CONSTEXPR constexpr
+#endif
+
+#pragma GCC push_options
+#pragma GCC optimize ("O3")
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -101,9 +110,6 @@ bool NeoPixel_espShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uin
 
 #ifdef __cplusplus
 }
-
-#pragma GCC push_options
-#pragma GCC optimize ("O2")
 
 namespace NeoPixelEx {
 
@@ -1088,14 +1094,13 @@ namespace NeoPixelEx {
                 if (!(mask >>= 1)) {
                     if (p < end) {
                         mask = 0x80; // load next byte indicator
-                        if constexpr (_TPixelType::kReOrder) {
+                        if __CONSTEXPR (_TPixelType::kReOrder) {
                             if (ofs == 2) {
                                 ofs = 0;
                             }
                             else {
                                 ofs++;
                             }
-
                         }
                         else {
                             pix = loadPixel(p, brightness);
@@ -1126,7 +1131,7 @@ namespace NeoPixelEx {
                     break;
                 }
                 if (mask == 0x80) {
-                    if constexpr (_TPixelType::kReOrder) {
+                    if __CONSTEXPR (_TPixelType::kReOrder) {
                         pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs);
                     }
                     pix = applyBrightness(pix, brightness);
@@ -1153,7 +1158,7 @@ namespace NeoPixelEx {
             }
 
             uint8_t pix;
-            if constexpr (_TPixelType::kReOrder) {
+            if __CONSTEXPR (_TPixelType::kReOrder) {
                 pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
             }
             else {
@@ -1253,7 +1258,18 @@ namespace NeoPixelEx {
             ets_intr_lock();
         #endif
 
-        StaticStrip::externalShow<_Chipset, GRB>(pin, nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr));
+        for(uint8_t i = 0; i < 5; i++) {
+            if (StaticStrip::externalShow<_Chipset, GRB>(pin, nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr))) {
+                break;
+            }
+            #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
+                ets_intr_unlock();
+            #endif
+            delayMicroseconds(100);
+            #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
+                ets_intr_lock();
+            #endif
+        }
 
         #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
             ets_intr_unlock();

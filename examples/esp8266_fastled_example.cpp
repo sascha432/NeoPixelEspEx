@@ -16,9 +16,11 @@
     #include "../../wifi.h"
 #endif
 
-#undef NEOPIXEL_NUM_PIXELS
-#define NEOPIXEL_NUM_PIXELS 64
+#define POWER_LIMIT_MW 2500
 
+#ifndef POWER_LIMIT_MW
+#define POWER_LIMIT_MW 0
+#endif
 
 CRGB pixelData[NEOPIXEL_NUM_PIXELS];
 // NeoPixelEx::CRGB requires more CPU cycles than NeoPixelEx::GRB
@@ -27,7 +29,6 @@ bool useFastLEDShow = true;
 int stepSize = 4;
 int bpm = 10;
 int mainLoopDelay = 5;
-int powerLimit = 2500; // mW
 bool dithering = false;
 
 NeoPixelEx::Context context;
@@ -52,9 +53,11 @@ static void show()
 //     }
 // }
 
+
+
 static void help()
 {
-    Serial.printf_P(PSTR(
+    Serial.print(F(
         "---\n"
         "+      increase brightness\n"
         "-      decrease brightness\n"
@@ -67,13 +70,11 @@ static void help()
         "w      connect to WiFi\n"
         "W      disconnect WiFi\n"
         "\n"
-        "power limit set to %umW\n"
-        "\n"), powerLimit
+        "power limit set to " __STRINGIFY(POWER_LIMIT_MW) "mW\n"
+        "\n")
     );
 }
 
-extern uint32_t test_value;
-uint32_t test_value;
 int pattern = 0;
 
 void update_pattern() {
@@ -88,7 +89,7 @@ void update_pattern() {
                 pixels[25] = 0x00ff00;
 
                 NeoPixelEx::GRB color(0x0000ff);
-                for(uint16_t i = 0; i < pixels.getNumPixels(); i += 10) {
+                for(uint16_t i = 0; i < pixels.getNumPixels() + 10; i += 10) {
                     pixels.fill(i, 10, color);
                     color <<= 8;
                     if (i % 30 == 20) {
@@ -105,20 +106,26 @@ void update_pattern() {
 
 void setup()
 {
+    WiFi.persistent(false);
+    WiFi.setAutoConnect(false);
+    WiFi.setAutoReconnect(false);
+    WiFi.disconnect();
+
     Serial.begin(115200);
     pixels.begin();
     NeoPixelEx::forceClear(NEOPIXEL_OUTPUT_PIN, 256);
 
     FastLED.addLeds<WS2812, NEOPIXEL_OUTPUT_PIN, GRB>(pixelData, NEOPIXEL_NUM_PIXELS);
-// #if NEOPIXEL_NUM_PIXELS < 100
-    FastLED.setMaxPowerInVoltsAndMilliamps(5, powerLimit / 5);
-// #endif
+    #if POWER_LIMIT_MW
+        FastLED.setMaxPowerInVoltsAndMilliamps(5, POWER_LIMIT_MW / 5);
+    #endif
 
     FastLED.setBrightness(10);
     FastLED.setDither(dithering);
 
     FastLED.clear();
     show();
+    return;
 
     schedule_recurrent_function_us([]() {
         help();
@@ -126,20 +133,23 @@ void setup()
     }, 5 * 1000 * 1000);
 
     schedule_recurrent_function_us([]() {
-        Serial.printf("FPS: %u\n", FastLED.getFPS());
+        Serial.printf_P(PSTR("FPS: %u\n"), FastLED.getFPS());
         return true;
     }, 5 * 1000 * 1000);
 
     update_pattern();
 
-    WiFi.persistent(false);
     WiFi.onEvent([](WiFiEvent_t event) {
         Serial.printf_P(PSTR("WiFi event: %u\n"), event);
         if (event == WIFI_EVENT_STAMODE_GOT_IP) {
-            Serial.printf_P(PSTR("WiFi: connected to %s / %s\n"), WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+            Serial.print(F("WiFi: connected to %"));
+            Serial.print(WiFi.SSID());
+            Serial.print(F(" / "));
+            WiFi.localIP().printTo(Serial);
+            Serial.println();
         }
         else if (event == WIFI_EVENT_STAMODE_DISCONNECTED) {
-            Serial.printf_P(PSTR("WiFi: disconnect\n"));
+            Serial.println(F("WiFi: disconnect"));
         }
     }, WIFI_EVENT_ANY);
 }
