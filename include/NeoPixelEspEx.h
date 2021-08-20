@@ -47,6 +47,8 @@
 #   else
 #       define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
 #   endif
+#elif ESP32
+#   define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
 #else
 #   define NEOPIXEL_USE_PRECACHING 0
 #endif
@@ -81,10 +83,12 @@
 #   define NEOPIXEL_DEBUG_TRIGGER_PIN2 -1
 #endif
 
-#if GCC < 10
-#   define __CONSTEXPR
-#else
-#   define __CONSTEXPR constexpr
+#ifndef __CONSTEXPR17
+#   if __GNUC__ >= 10
+#       define __CONSTEXPR17 constexpr
+#   else
+#       define __CONSTEXPR17
+#   endif
 #endif
 
 #pragma GCC push_options
@@ -206,7 +210,11 @@ namespace NeoPixelEx {
 
     protected:
         uint64_t millis64() const {
-            return micros64() / 1000;
+            #if ESP32
+                return esp_timer_get_time() / 1000;
+            #elif ESP8266
+                return micros64() / 1000;
+            #endif
         }
 
     private:
@@ -387,29 +395,29 @@ namespace NeoPixelEx {
             }
         }
 
-    #if NEOPIXEL_HAVE_STATS
-        Stats &getStats() {
-            return _stats;
-        }
-    #endif
+        #if NEOPIXEL_HAVE_STATS
+            Stats &getStats() {
+                return _stats;
+            }
+        #endif
 
-    #if NEOPIXEL_DEBUG
-        DebugContext &getDebugContext() {
-            return _debug;
-        }
-    #endif
+        #if NEOPIXEL_DEBUG
+            DebugContext &getDebugContext() {
+                return _debug;
+            }
+        #endif
 
         // returns global context if contextPtr is nullptr
         static Context &validate(void *contextPtr);
 
     private:
-    #if NEOPIXEL_HAVE_STATS
-        Stats _stats;
-    #endif
-    #if NEOPIXEL_DEBUG
-        DebugContext _debug;
-    #endif
-        uint32 _lastDisplayTime;
+        #if NEOPIXEL_HAVE_STATS
+            Stats _stats;
+        #endif
+        #if NEOPIXEL_DEBUG
+            DebugContext _debug;
+        #endif
+        uint32_t _lastDisplayTime;
     };
 
     struct GRBOrder {
@@ -981,16 +989,16 @@ namespace NeoPixelEx {
             }
         }
 
-        #else
+    #else
 
         __attribute__((always_inline)) inline static void gpio_set_level_high(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
         {
-            gpio_set_level(pin, true);
+            gpio_set_level(static_cast<gpio_num_t>(pin), true);
         }
 
         __attribute__((always_inline)) inline static void gpio_set_level_low(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
         {
-            gpio_set_level(pin, false);
+            gpio_set_level(static_cast<gpio_num_t>(pin), false);
         }
 
     #endif
@@ -1094,7 +1102,7 @@ namespace NeoPixelEx {
                 if (!(mask >>= 1)) {
                     if (p < end) {
                         mask = 0x80; // load next byte indicator
-                        if __CONSTEXPR (_TPixelType::kReOrder) {
+                        if __CONSTEXPR17 (_TPixelType::kReOrder) {
                             if (ofs == 2) {
                                 ofs = 0;
                             }
@@ -1131,7 +1139,7 @@ namespace NeoPixelEx {
                     break;
                 }
                 if (mask == 0x80) {
-                    if __CONSTEXPR (_TPixelType::kReOrder) {
+                    if __CONSTEXPR17 (_TPixelType::kReOrder) {
                         pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs);
                     }
                     pix = applyBrightness(pix, brightness);
@@ -1158,7 +1166,7 @@ namespace NeoPixelEx {
             }
 
             uint8_t pix;
-            if __CONSTEXPR (_TPixelType::kReOrder) {
+            if __CONSTEXPR17 (_TPixelType::kReOrder) {
                 pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
             }
             else {
