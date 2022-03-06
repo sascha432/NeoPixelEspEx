@@ -179,7 +179,7 @@ namespace NeoPixelEx {
 
     template<uint32_t _FCpu>
     using _TimingsWS2813 = Timings<350, 750, 1250, 250, 1500, _FCpu>;
-    using TimingsWS2812 = _TimingsWS2812<F_CPU>;
+    using TimingsWS2813 = _TimingsWS2813<F_CPU>;
 
     using DefaultTimings = NEOPIXEL_CHIPSET;
 
@@ -1070,9 +1070,9 @@ namespace NeoPixelEx {
         template<typename _TChipset, typename _TPixelType>
         static bool NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint8_t pin, uint16_t brightness, uint8_t pix, uint8_t mask, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod, uint32_t pinMask, uint32_t invPinMask)
         {
-        #if NEOPIXEL_USE_PRECACHING
-            PRECACHE_START(NeoPixel_espShow);
-        #endif
+            #if NEOPIXEL_USE_PRECACHING
+                PRECACHE_START(NeoPixel_espShow);
+            #endif
             uint32_t startTime = 0;
             uint32_t c, t;
             uint8_t ofs = 1;
@@ -1151,9 +1151,9 @@ namespace NeoPixelEx {
             }
 
             return period != 0;
-        #if NEOPIXEL_USE_PRECACHING
-            PRECACHE_END(NeoPixel_espShow);
-        #endif
+            #if NEOPIXEL_USE_PRECACHING
+                PRECACHE_END(NeoPixel_espShow);
+            #endif
         }
 
         template<typename _TChipset, typename _TPixelType>
