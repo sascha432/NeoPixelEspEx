@@ -16,8 +16,8 @@
 #endif
 
 // enable the brightness scaling
-#ifndef NEOPIXEL_HAVE_BRIGHTHNESS
-#   define NEOPIXEL_HAVE_BRIGHTHNESS 1
+#ifndef NEOPIXEL_HAVE_BRIGHTNESS
+#   define NEOPIXEL_HAVE_BRIGHTNESS 1
 #endif
 
 // enable simple stats about frames, dropped frames and fps
@@ -1010,7 +1010,7 @@ namespace NeoPixelEx {
             return cyleCount;
         }
 
-    #if NEOPIXEL_HAVE_BRIGHTHNESS
+    #if NEOPIXEL_HAVE_BRIGHTNESS
 
         template<typename _OrderType>
         __attribute__((always_inline)) inline static uint8_t loadPixel(const uint8_t *&ptr, uint16_t brightness, uint8_t ofs)
