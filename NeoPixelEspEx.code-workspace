@@ -89,6 +89,14 @@
 			"mutex": "cpp",
 			"stop_token": "cpp",
 			"thread": "cpp"
-		}
+		},
+		"cSpell.words": [
+			"CLKS",
+			"CRGB",
+			"gpio",
+			"GPOC",
+			"IRAM",
+			"XTRA"
+		]
 	}
 }

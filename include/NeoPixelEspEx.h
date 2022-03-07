@@ -109,7 +109,7 @@ extern "C" {
 // show pixels
 // numBytes is 3 per pixel
 // brightness 0-255
-// context is a pointer to thje context object of the LED strip. nullptr will use the shared global object
+// context is a pointer to the context object of the LED strip. nullptr will use the shared global object
 bool NeoPixel_espShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint16_t brightness = 255, void *context = nullptr);
 
 #ifdef __cplusplus
@@ -1005,9 +1005,9 @@ namespace NeoPixelEx {
 
         __attribute__((always_inline)) inline static uint32_t _getCycleCount(void)
         {
-            uint32_t cyleCount;
-            __asm__ __volatile__("rsr %0,ccount" : "=a"(cyleCount));
-            return cyleCount;
+            uint32_t cycleCount;
+            __asm__ __volatile__("rsr %0,ccount" : "=a"(cycleCount));
+            return cycleCount;
         }
 
     #if NEOPIXEL_HAVE_BRIGHTNESS
@@ -1161,7 +1161,7 @@ namespace NeoPixelEx {
         {
             auto &context = *reinterpret_cast<NeoPixelEx::Context *>(contextPtr);
             brightness &= 0xff;
-            if (brightness) { // change range to 1-256 to avoid divison by 255 in applyBrightness()
+            if (brightness) { // change range to 1-256 to avoid division by 255 in applyBrightness()
                 brightness++;
             }
 
