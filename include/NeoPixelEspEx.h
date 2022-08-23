@@ -12,7 +12,12 @@
 
 // enable debug mode
 #ifndef NEOPIXEL_DEBUG
-#define NEOPIXEL_DEBUG 0
+#    define NEOPIXEL_DEBUG 0
+#endif
+
+// the output for DIN will be inverted if set to 1
+#ifndef NEOPIXEL_INVERT_OUTPUT
+#    define NEOPIXEL_INVERT_OUTPUT 0
 #endif
 
 // enable the brightness scaling
@@ -1008,13 +1013,13 @@ namespace NeoPixelEx {
         template<uint8_t _Pin>
         __attribute__((always_inline)) inline static void gpio_set_level_high()
         {
-            gpio_set_level(static_cast<gpio_num_t>(_Pin), true);
+            gpio_set_level(static_cast<gpio_num_t>(_Pin), !NEOPIXEL_INVERT_OUTPUT);
         }
 
         template<uint8_t _Pin>
         __attribute__((always_inline)) inline static void gpio_set_level_low()
         {
-            gpio_set_level(static_cast<gpio_num_t>(_Pin), false);
+            gpio_set_level(static_cast<gpio_num_t>(_Pin), !!NEOPIXEL_INVERT_OUTPUT);
         }
 
     #endif

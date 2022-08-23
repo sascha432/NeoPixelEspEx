@@ -2,6 +2,7 @@
 
 ## Version 0.0.2
 
+- GPIO16 seems to have some issues when running with 160MHz
 - Wrapper class for plain data pointers
 - Context object for each LED strip and global context object for legacy functions
 - Support for espressif8266@3.0.0, 2.6.3 and 2.3.3
