@@ -111,7 +111,7 @@ bool NeoPixel_espShow(const uint8_t *pixels, uint16_t numBytes, uint16_t brightn
 
 namespace NeoPixelEx {
 
-    // timits in nano seconds
+    // timings in nano seconds
     template<uint32_t _T0H, uint32_t _T1H, uint32_t _TPeriod, uint32_t _TReset, uint32_t _MinDisplayPeriod, uint32_t _FCpu/*Hz or MHz*/>
     class Timings {
     public:
@@ -168,7 +168,6 @@ namespace NeoPixelEx {
 
     template<uint32_t _FCpu>
     using _TimingsWS2812 = Timings<400, 800, 1250, 50, 1275, _FCpu>;
-    // using _TimingsWS2812 = Timings<400, 800, 1250, 50, _FCpu>;
     using TimingsWS2812 = _TimingsWS2812<F_CPU>;
 
     template<uint32_t _FCpu>
@@ -827,7 +826,6 @@ namespace NeoPixelEx {
 
     template<uint8_t _OutputPin, uint16_t _NumPixels, typename _PixelType = GRB, typename _Chipset = TimingsWS2812, typename _DataType = PixelData<_NumPixels, _PixelType>>
     class Strip;
-    //<_OutputPin, _NumPixels, _PixelType, _Chipset, _DataType>;
 
     using StaticStrip = Strip<0, 0, RGB, DefaultTimings>;
 
@@ -856,14 +854,14 @@ namespace NeoPixelEx {
         }
 
         __attribute__((always_inline)) inline void begin() {
-            digitalWrite(kOutputPin, LOW);
-            pinMode(kOutputPin, OUTPUT);
+            digitalWrite(_OutputPin, LOW);
+            pinMode(_OutputPin, OUTPUT);
         }
 
         __attribute__((always_inline)) inline void end() {
             clear();
-            digitalWrite(kOutputPin, LOW);
-            pinMode(kOutputPin, INPUT);
+            digitalWrite(_OutputPin, LOW);
+            pinMode(_OutputPin, INPUT);
         }
 
         // clear is equal to
@@ -902,7 +900,7 @@ namespace NeoPixelEx {
         }
 
         __attribute__((always_inline)) inline void show(uint8_t brightness = 255) {
-            internalShow<kOutputPin>(reinterpret_cast<uint8_t *>(_data.data()), getNumBytes(), brightness, _context);
+            internalShow<_OutputPin>(reinterpret_cast<uint8_t *>(_data.data()), getNumBytes(), brightness, _context);
         }
 
         __attribute__((always_inline)) inline pixel_type &operator[](int index) {
@@ -918,7 +916,7 @@ namespace NeoPixelEx {
         __attribute__((always_inline)) void _clear(uint16_t numPixels)
         {
             uint8_t buf[1];
-            internalShow<kOutputPin>(buf, getNumBytes(), 0, _context);
+            internalShow<_OutputPin>(buf, getNumBytes(), 0, _context);
         }
 
         __attribute__((always_inline)) inline bool canShow() const {
@@ -971,10 +969,18 @@ namespace NeoPixelEx {
         __attribute__((always_inline)) inline static void gpio_set_level_high()
         {
             if __CONSTEXPR17 (_Pin == 16) {
-                GP16O |= 1;
+                #if NEOPIXEL_INVERT_OUTPUT
+                    GP16O = 0;
+                #else
+                    GP16O = 1;
+                #endif
             }
             else {
-                GPOS = _BV(_Pin);
+                #if NEOPIXEL_INVERT_OUTPUT
+                    GPOC = _BV(_Pin);
+                #else
+                    GPOS = _BV(_Pin);
+                #endif
             }
         }
 
@@ -982,10 +988,18 @@ namespace NeoPixelEx {
         __attribute__((always_inline)) inline static void gpio_set_level_low()
         {
             if __CONSTEXPR17 (_Pin == 16) {
-                GP16O &= ~1;
+                #if NEOPIXEL_INVERT_OUTPUT
+                    GP16O = 1;
+                #else
+                    GP16O = 0;
+                #endif
             }
             else {
-                GPOC = _BV(_Pin);
+                #if NEOPIXEL_INVERT_OUTPUT
+                    GPOS = _BV(_Pin);
+                #else
+                    GPOC = _BV(_Pin);
+                #endif
             }
         }
 
@@ -1109,7 +1123,7 @@ namespace NeoPixelEx {
                 #endif
 
                 gpio_set_level_high<_Pin>();
-                startTime = c; // Save start time
+                startTime = c; // save start time
 
                 if (!(mask >>= 1)) {
                     if (p < end) {
@@ -1127,9 +1141,9 @@ namespace NeoPixelEx {
                         //     pix = loadPixel(p, brightness);
                         // }
                     }
-                    else {
-                        mask = 0; // end of frame indicator
-                    }
+                    // else {
+                    //     mask = 0; // end of frame indicator
+                    // }
                 }
 
                 while (((c = _getCycleCount()) - startTime) < t) {
@@ -1200,11 +1214,11 @@ namespace NeoPixelEx {
                 context.getStats().increment(result);
             #endif
 
-            context.setLastDisplayTime(micros());
-
             #if defined(ESP8266) && !NEOPIXEL_ALLOW_INTERRUPTS
                 ets_intr_unlock();
             #endif
+
+            context.setLastDisplayTime(micros());
 
             return result;
         }
@@ -1235,7 +1249,6 @@ namespace NeoPixelEx {
 
             return result;
         }
-
 
 
     private:

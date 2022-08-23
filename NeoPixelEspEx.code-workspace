@@ -93,10 +93,19 @@
 		"cSpell.words": [
 			"CLKS",
 			"CRGB",
+			"ESPSHOW",
 			"gpio",
 			"GPOC",
 			"IRAM",
+			"MILLIS",
+			"PRECACHE",
+			"PRECACHING",
 			"XTRA"
-		]
+		],
+		"workbench.colorCustomizations": {
+			"activityBar.background": "#591418",
+			"titleBar.activeBackground": "#7C1C21",
+			"titleBar.activeForeground": "#FEFBFB"
+		}
 	}
 }

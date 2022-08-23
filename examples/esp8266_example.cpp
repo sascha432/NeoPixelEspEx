@@ -9,11 +9,8 @@
 #define FASTLED_ESP8266_RAW_PIN_ORDER
 #include <FastLED.h>
 #include "NeoPixelEspEx.h"
+#include "wiring_private.h"
 
-#undef NEOPIXEL_NUM_PIXELS
-#define NEOPIXEL_NUM_PIXELS 100
-
-// #define NEOPIXEL_NUM_PIXELS_CLEAR NEOPIXEL_NUM_PIXELS * 2
 #define NEOPIXEL_NUM_PIXELS_CLEAR NEOPIXEL_NUM_PIXELS + 10
 
 using namespace NeoPixelEx;
@@ -40,6 +37,7 @@ void preinit()
 
 void help()
 {
+    Serial.printf_P(PSTR("---\npin=%u pixels=%u cpu=%u\n"), pixels.kOutputPin, pixels.getNumPixels(), (int)(F_CPU / 1000000UL));
     Serial.print(F(
         "---\n" \
         "H  turn all pixels off and halt\n" \
@@ -72,7 +70,7 @@ void setup()
     ::printf("setup\n");
     uart_uninit(_uart);
 #endif
-    forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, NEOPIXEL_NUM_PIXELS_CLEAR);
+    forceClear<pixels.kOutputPin, decltype(pixels)::chipset_type>(NEOPIXEL_NUM_PIXELS_CLEAR);
 
     Serial.begin(115200);
     Serial.println(F("starting..."));
@@ -159,7 +157,7 @@ static int delayMillisOld = -1;
 
 void end_test(const __FlashStringHelper *msg)
 {
-    forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, NEOPIXEL_NUM_PIXELS_CLEAR);
+    forceClear<pixels.kOutputPin, decltype(pixels)::chipset_type>(NEOPIXEL_NUM_PIXELS_CLEAR);
     testAll = -1;
     if (delayMillisOld != -1) {
         delayMillis = delayMillisOld;
@@ -375,7 +373,7 @@ void loop()
                     // falltrough
                 case 'C':
                     Serial.println(F("clearing all pixels..."));
-                    forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, NEOPIXEL_NUM_PIXELS_CLEAR);
+                    forceClear<pixels.kOutputPin, decltype(pixels)::chipset_type>(NEOPIXEL_NUM_PIXELS_CLEAR);
                     Serial.println(F("waiting 3 seconds..."));
                     delay(3000);
                     clear_keys();
@@ -384,7 +382,7 @@ void loop()
                     #endif
                     break;
                 case 'H':
-                    forceClear<decltype(pixels)::chipset_type>(pixels.kOutputPin, NEOPIXEL_NUM_PIXELS_CLEAR);
+                    forceClear<pixels.kOutputPin, decltype(pixels)::chipset_type>(NEOPIXEL_NUM_PIXELS_CLEAR);
                     Serial.println(F("halted..."));
                     for(;;) {
                         delay(1000);
