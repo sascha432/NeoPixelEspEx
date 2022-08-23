@@ -94,10 +94,6 @@
 #pragma GCC push_options
 #pragma GCC optimize ("O3")
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // void NeoPixel_fillColorGRB(void *pixels, uint16_t numBytes, const NeoPixelEx::GRB &color);
 
 // deprecated legacy function
@@ -110,10 +106,8 @@ extern "C" {
 // numBytes is 3 per pixel
 // brightness 0-255
 // context is a pointer to the context object of the LED strip. nullptr will use the shared global object
-bool NeoPixel_espShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint16_t brightness = 255, void *context = nullptr);
-
-#ifdef __cplusplus
-}
+template<uint8_t _Pin>
+bool NeoPixel_espShow(const uint8_t *pixels, uint16_t numBytes, uint16_t brightness = 255, void *context = nullptr);
 
 namespace NeoPixelEx {
 
@@ -268,6 +262,8 @@ namespace NeoPixelEx {
     #endif
     };
 
+    #if NEOPIXEL_DEBUG
+
     class DebugContext {
     public:
     static constexpr uint8_t kInvalidPin = 0xff;
@@ -363,6 +359,8 @@ namespace NeoPixelEx {
         bool _states[4];
         bool _enabled;
     };
+
+    #endif
 
     class Context {
     public:
@@ -820,8 +818,8 @@ namespace NeoPixelEx {
     };
 
     // force to clear all pixels without interruptions
-    template<typename _Chipset = NEOPIXEL_CHIPSET>
-    inline void forceClear(uint8_t pin, uint16_t numPixels, Context *contextPtr = nullptr);
+    template<uint8_t _Pin, typename _Chipset = NEOPIXEL_CHIPSET>
+    inline void forceClear(uint16_t numPixels, Context *contextPtr = nullptr);
 
     #if NEOPIXEL_HAVE_STATS
         NeoPixelEx::Stats &getStats();
@@ -904,7 +902,7 @@ namespace NeoPixelEx {
         }
 
         __attribute__((always_inline)) inline void show(uint8_t brightness = 255) {
-            internalShow(kOutputPin, reinterpret_cast<uint8_t *>(_data.data()), getNumBytes(), brightness, _context);
+            internalShow<kOutputPin>(reinterpret_cast<uint8_t *>(_data.data()), getNumBytes(), brightness, _context);
         }
 
         __attribute__((always_inline)) inline pixel_type &operator[](int index) {
@@ -920,7 +918,7 @@ namespace NeoPixelEx {
         __attribute__((always_inline)) void _clear(uint16_t numPixels)
         {
             uint8_t buf[1];
-            internalShow(kOutputPin, buf, getNumBytes(), 0, _context);
+            internalShow<kOutputPin>(buf, getNumBytes(), 0, _context);
         }
 
         __attribute__((always_inline)) inline bool canShow() const {
@@ -969,36 +967,40 @@ namespace NeoPixelEx {
 
     #if defined(ESP8266)
 
-        __attribute__((always_inline)) inline static void gpio_set_level_high(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
+        template<uint8_t _Pin>
+        __attribute__((always_inline)) inline static void gpio_set_level_high()
         {
-            if (pin == 16) {
+            if __CONSTEXPR17 (_Pin == 16) {
                 GP16O |= 1;
             }
             else {
-                GPOS = pinMask;
+                GPOS = _BV(_Pin);
             }
         }
 
-        __attribute__((always_inline)) inline static void gpio_set_level_low(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
+        template<uint8_t _Pin>
+        __attribute__((always_inline)) inline static void gpio_set_level_low()
         {
-            if (pin == 16) {
+            if __CONSTEXPR17 (_Pin == 16) {
                 GP16O &= ~1;
             }
             else {
-                GPOC = pinMask;
+                GPOC = _BV(_Pin);
             }
         }
 
     #else
 
-        __attribute__((always_inline)) inline static void gpio_set_level_high(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
+        template<uint8_t _Pin>
+        __attribute__((always_inline)) inline static void gpio_set_level_high()
         {
-            gpio_set_level(static_cast<gpio_num_t>(pin), true);
+            gpio_set_level(static_cast<gpio_num_t>(_Pin), true);
         }
 
-        __attribute__((always_inline)) inline static void gpio_set_level_low(uint8_t pin, uint32_t pinMask, uint32_t invertedPinMask)
+        template<uint8_t _Pin>
+        __attribute__((always_inline)) inline static void gpio_set_level_low()
         {
-            gpio_set_level(static_cast<gpio_num_t>(pin), false);
+            gpio_set_level(static_cast<gpio_num_t>(_Pin), false);
         }
 
     #endif
@@ -1067,15 +1069,25 @@ namespace NeoPixelEx {
         #endif
 
         // extra function to keep the IRAM usage low
-        template<typename _TChipset, typename _TPixelType>
-        static bool NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint8_t pin, uint16_t brightness, uint8_t pix, uint8_t mask, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod, uint32_t pinMask, uint32_t invPinMask)
+        template<uint8_t _Pin, typename _TChipset, typename _TPixelType>
+        static bool NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod)
         {
-            #if NEOPIXEL_USE_PRECACHING
-                PRECACHE_START(NeoPixel_espShow);
-            #endif
             uint32_t startTime = 0;
             uint32_t c, t;
             uint8_t ofs = 1;
+            uint8_t mask = 0x80;
+            uint8_t pix;
+            if __CONSTEXPR17 (_TPixelType::kReOrder) {
+                pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
+            }
+            else {
+                pix = loadPixel(p, brightness);
+            }
+            pix = applyBrightness(pix, brightness);
+
+            #if NEOPIXEL_USE_PRECACHING
+                PRECACHE_START(NeoPixel_espShow);
+            #endif
 
             for (;;) {
                 t = (pix & mask) ? time1 : time0;
@@ -1096,13 +1108,14 @@ namespace NeoPixelEx {
                     }
                 #endif
 
-                gpio_set_level_high(pin, pinMask, invPinMask);
+                gpio_set_level_high<_Pin>();
                 startTime = c; // Save start time
 
                 if (!(mask >>= 1)) {
                     if (p < end) {
                         mask = 0x80; // load next byte indicator
                         if __CONSTEXPR17 (_TPixelType::kReOrder) {
+                            // offset of R/G/B
                             if (ofs == 2) {
                                 ofs = 0;
                             }
@@ -1110,9 +1123,9 @@ namespace NeoPixelEx {
                                 ofs++;
                             }
                         }
-                        else {
-                            pix = loadPixel(p, brightness);
-                        }
+                        // else {
+                        //     pix = loadPixel(p, brightness);
+                        // }
                     }
                     else {
                         mask = 0; // end of frame indicator
@@ -1122,7 +1135,7 @@ namespace NeoPixelEx {
                 while (((c = _getCycleCount()) - startTime) < t) {
                     // t0h/t1h wait
                 }
-                gpio_set_level_low(pin, pinMask, invPinMask);
+                gpio_set_level_low<_Pin>();
 
                 #if NEOPIXEL_ALLOW_INTERRUPTS
                     // check if we had a timeout during the TxH phase
@@ -1142,6 +1155,9 @@ namespace NeoPixelEx {
                     if __CONSTEXPR17 (_TPixelType::kReOrder) {
                         pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs);
                     }
+                    else {
+                        pix = loadPixel(p, brightness);
+                    }
                     pix = applyBrightness(pix, brightness);
                 }
 
@@ -1156,24 +1172,14 @@ namespace NeoPixelEx {
             #endif
         }
 
-        template<typename _TChipset, typename _TPixelType>
-        static bool espShow(uint8_t pin, uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t pinMask, void *contextPtr)
+        template<uint8_t _Pin, typename _TChipset, typename _TPixelType>
+        static bool espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, void *contextPtr)
         {
             auto &context = *reinterpret_cast<NeoPixelEx::Context *>(contextPtr);
             brightness &= 0xff;
             if (brightness) { // change range to 1-256 to avoid division by 255 in applyBrightness()
                 brightness++;
             }
-
-            uint8_t pix;
-            if __CONSTEXPR17 (_TPixelType::kReOrder) {
-                pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
-            }
-            else {
-                pix = loadPixel(p, brightness);
-            }
-            pix = applyBrightness(pix, brightness);
-            uint8_t mask = 0x80;
 
             context.waitRefreshTime(_TChipset::getMinDisplayPeriod());
 
@@ -1188,7 +1194,7 @@ namespace NeoPixelEx {
             uint32_t period = _TChipset::getCyclesPeriod();
 
             // this part must be in IRAM/ICACHE
-            auto result = _espShow<_TChipset, _TPixelType>(pin, brightness, pix, mask, p, end, _TChipset::getCyclesT0H(), _TChipset::getCyclesT1H(), period, _TChipset::getCyclesRES(), _TChipset::getMinDisplayPeriod(), pinMask, ~pinMask);
+            auto result = _espShow<_Pin, _TChipset, _TPixelType>(brightness, p, end, _TChipset::getCyclesT0H(), _TChipset::getCyclesT1H(), period, _TChipset::getCyclesRES(), _TChipset::getMinDisplayPeriod());
 
             #if NEOPIXEL_HAVE_STATS
                 context.getStats().increment(result);
@@ -1203,14 +1209,15 @@ namespace NeoPixelEx {
             return result;
         }
 
-        bool internalShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
+        template<uint8_t _Pin>
+        bool internalShow(const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
         {
-            return externalShow<_Chipset, _PixelType>(pin, pixels, numBytes, brightness, context);
+            return externalShow<_Pin, _Chipset, _PixelType>(pixels, numBytes, brightness, context);
         }
 
     public:
-        template<typename _Chipset2, typename _PixelType2>
-        static inline bool externalShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
+        template<uint8_t _Pin, typename _Chipset2, typename _PixelType2>
+        static inline bool externalShow(const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
         {
             bool result = false;
             auto p = pixels;
@@ -1220,7 +1227,7 @@ namespace NeoPixelEx {
                 uint8_t retries = NEOPIXEL_INTERRUPT_RETRY_COUNT;
                 do {
             #endif
-                    result = espShow<_Chipset2, _PixelType2>(pin, brightness, p, end, pin == 16 ? _BV(0) : _BV(pin), &context);
+                    result = espShow<_Pin, _Chipset2, _PixelType2>(brightness, p, end, &context);
             #if NEOPIXEL_INTERRUPT_RETRY_COUNT > 0
                 }
                 while(result != true && retries-- > 0);
@@ -1255,11 +1262,11 @@ namespace NeoPixelEx {
         return *reinterpret_cast<Context *>(contextPtr);
     }
 
-    template<typename _Chipset>
-    inline void forceClear(uint8_t pin, uint16_t numPixels, Context *contextPtr)
+    template<uint8_t _Pin, typename _Chipset>
+    inline void forceClear(uint16_t numPixels, Context *contextPtr)
     {
-        digitalWrite(pin, LOW);
-        pinMode(pin, OUTPUT);
+        digitalWrite(_Pin, LOW);
+        pinMode(_Pin, OUTPUT);
         delayMicroseconds(100);
 
         #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
@@ -1267,7 +1274,7 @@ namespace NeoPixelEx {
         #endif
 
         for(uint8_t i = 0; i < 5; i++) {
-            if (StaticStrip::externalShow<_Chipset, GRB>(pin, nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr))) {
+            if (StaticStrip::externalShow<_Pin, _Chipset, GRB>(nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr))) {
                 break;
             }
             #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
@@ -1298,14 +1305,13 @@ extern "C" {
         NeoPixel_fillColorGRB(reinterpret_cast<NeoPixelEx::RGB *>(pixels), numBytes / 3, NeoPixelEx::RGB(RGBcolor));
     }
 
-    inline bool NeoPixel_espShow(uint8_t pin, const uint8_t *pixels, uint16_t numBytes, uint16_t brightness, void *contextPtr)
-    {
-        return NeoPixelEx::StaticStrip::externalShow<NeoPixelEx::DefaultTimings, NeoPixelEx::GRB>(pin, pixels, numBytes, brightness, NeoPixelEx::Context::validate(contextPtr));
-    }
-
 }
 
-#endif
+template<uint8_t _Pin>
+inline bool NeoPixel_espShow(const uint8_t *pixels, uint16_t numBytes, uint16_t brightness, void *contextPtr)
+{
+    return NeoPixelEx::StaticStrip::externalShow<_Pin, NeoPixelEx::DefaultTimings, NeoPixelEx::GRB>(pixels, numBytes, brightness, NeoPixelEx::Context::validate(contextPtr));
+}
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
