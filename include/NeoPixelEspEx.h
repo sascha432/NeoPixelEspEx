@@ -877,6 +877,10 @@ namespace NeoPixelEx {
             _clear(_data.size());
         }
 
+        __attribute__((always_inline)) inline void off() {
+            clear();
+        }
+
         // color is RGB
         __attribute__((always_inline)) inline void fill(uint32_t color) {
             _data.fill(pixel_type(color));
