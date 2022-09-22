@@ -36,7 +36,7 @@
 #   ifndef NEOPIXEL_ALLOW_INTERRUPTS
 #   define NEOPIXEL_ALLOW_INTERRUPTS 1
 #   endif
-// use preching instead of IRAM
+// use prefetching instead of IRAM
 //
 // precaching adds extra overhead to each show() call
 //
@@ -176,7 +176,8 @@ namespace NeoPixelEx {
     using TimingsWS2812 = _TimingsWS2812<F_CPU>;
 
     template<uint32_t _FCpu>
-    using _TimingsWS2813 = Timings<350, 750, 1250, 250, 1500, _FCpu>;
+    using _TimingsWS2813 = Timings<320, 640, 1280, 280, 1500, _FCpu>;
+    // using _TimingsWS2813 = Timings<350, 750, 1250, 250, 1500, _FCpu>;
     using TimingsWS2813 = _TimingsWS2813<F_CPU>;
 
     using DefaultTimings = NEOPIXEL_CHIPSET;
