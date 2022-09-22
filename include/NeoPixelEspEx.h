@@ -172,12 +172,11 @@ namespace NeoPixelEx {
     using TimingsWS2811 = _TimingsWS2811<F_CPU>;
 
     template<uint32_t _FCpu>
-    using _TimingsWS2812 = Timings<400, 800, 1250, 50, 1275, _FCpu>;
+    using _TimingsWS2812 = Timings<400, 800, 1250, 85, 1275, _FCpu>;
     using TimingsWS2812 = _TimingsWS2812<F_CPU>;
 
     template<uint32_t _FCpu>
     using _TimingsWS2813 = Timings<320, 640, 1280, 280, 1500, _FCpu>;
-    // using _TimingsWS2813 = Timings<350, 750, 1250, 250, 1500, _FCpu>;
     using TimingsWS2813 = _TimingsWS2813<F_CPU>;
 
     using DefaultTimings = NEOPIXEL_CHIPSET;
