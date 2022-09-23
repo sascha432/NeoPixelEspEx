@@ -2,10 +2,12 @@
 
 ## Version 0.0.2
 
-- GPIO16 seems to have some issues when running with 160MHz
+- Fixed wrong color of the first pixel if CRGBType was used
+- Updated timings for WS2813
+- GPIO16 seems to have some issues when running with 160MHz, try another port if any issues occur
 - Wrapper class for plain data pointers
 - Context object for each LED strip and global context object for legacy functions
-- Support for espressif8266@3.0.0, 2.6.3 and 2.3.3
+- Support for espressif8266@3.0.1, 2.6.3 and 2.3.3
 - Templates for timings
 - GRB, RGB and Array types
 - Strip class

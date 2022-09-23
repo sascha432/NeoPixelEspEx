@@ -125,6 +125,7 @@ namespace NeoPixelEx {
 
     public:
         static constexpr cpu_frequency_t kFCpu = _FCpu < 32768 ? _FCpu : _FCpu / 1000000UL;
+        static constexpr uint16_t kResetDelay = _TReset;
 
         constexpr Timings() {}
 
@@ -514,7 +515,7 @@ namespace NeoPixelEx {
         uint8_t b;
     };
 
-    class CRGBType
+    class CRGBType // kReOrder == true requires random reads with an offset instead of incrementing a pointer
     {
     public:
         using OrderType = GRBOrder;
@@ -654,7 +655,7 @@ namespace NeoPixelEx {
 
     using GRB = Color<GRBType>;
     using RGB = Color<RGBType>;
-    using CRGB = Color<CRGBType>;
+    using CRGB = Color<CRGBType>; // this requires more CPU power
 
     // wrapper for any raw pointer
     template<size_t _NumElements, typename _PixelType = GRB>
@@ -1097,11 +1098,11 @@ namespace NeoPixelEx {
         {
             uint32_t startTime = 0;
             uint32_t c, t;
-            uint8_t ofs = 1;
             uint8_t mask = 0x80;
             uint8_t pix;
+            uint8_t ofs;
             if __CONSTEXPR17 (_TPixelType::kReOrder) {
-                pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, 0);
+                pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs = 1);
             }
             else {
                 pix = loadPixel(p, brightness);
@@ -1117,7 +1118,7 @@ namespace NeoPixelEx {
 
                 #if NEOPIXEL_ALLOW_INTERRUPTS
                     // check first if we have a timeout
-                    if (((c = _getCycleCount()) - startTime) <= period + (uint8_t)microsecondsToClockCycles(0.6)) {
+                    if (((c = _getCycleCount()) - startTime) <= period + static_cast<uint8_t>(microsecondsToClockCycles(0.6))) {
                 #endif
                         while (((c = _getCycleCount()) - startTime) < period) {
                             // wait for bit start
@@ -1162,7 +1163,7 @@ namespace NeoPixelEx {
 
                 #if NEOPIXEL_ALLOW_INTERRUPTS
                     // check if we had a timeout during the TxH phase
-                    if ((c - startTime) > t + (uint8_t)microsecondsToClockCycles(0.3)) {
+                    if ((c - startTime) > t + static_cast<uint8_t>(microsecondsToClockCycles(0.3))) {
                         #if NEOPIXEL_DEBUG
                             Context::validate(nullptr).getDebugContext().togglePin2();
                         #endif
@@ -1289,7 +1290,7 @@ namespace NeoPixelEx {
     {
         digitalWrite(_Pin, LOW);
         pinMode(_Pin, OUTPUT);
-        delayMicroseconds(100);
+        delayMicroseconds(_Chipset::kResetDelay);
 
         #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
             ets_intr_lock();
@@ -1302,7 +1303,7 @@ namespace NeoPixelEx {
             #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
                 ets_intr_unlock();
             #endif
-            delayMicroseconds(100);
+            delayMicroseconds(_Chipset::kResetDelay);
             #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
                 ets_intr_lock();
             #endif
@@ -1324,7 +1325,7 @@ extern "C" {
 
     inline void NeoPixel_fillColor(uint8_t *pixels, uint16_t numBytes, uint32_t RGBcolor)
     {
-        NeoPixel_fillColorGRB(reinterpret_cast<NeoPixelEx::RGB *>(pixels), numBytes / 3, NeoPixelEx::RGB(RGBcolor));
+        NeoPixel_fillColorGRB(reinterpret_cast<NeoPixelEx::RGB *>(pixels), numBytes / sizeof(NeoPixelEx::RGB), NeoPixelEx::RGB(RGBcolor));
     }
 
 }
