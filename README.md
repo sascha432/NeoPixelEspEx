@@ -2,6 +2,10 @@
 
 Library for WS281x and compatible LEDs for ESP8266 and ESP32. It can be used as slim standalone version or together with FastLED, <s>which currently does not work properly with `framework-arduinoespressif8266 3.0.0`</s> The current master branch fixes the issue.
 
+## FastLED Fork
+
+Since the current FastLED 3.5 still has issues with WS281x, I updated my fork [https://github.com/sascha432/FastLED](https://github.com/sascha432/FastLED)
+
 ## Features
 
 - Support for ESP8266/GPIO16
