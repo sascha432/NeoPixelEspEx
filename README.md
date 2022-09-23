@@ -4,7 +4,7 @@ Library for WS281x and compatible LEDs for ESP8266 and ESP32. It can be used as 
 
 ## FastLED Fork
 
-Since the current FastLED 3.5 still has issues with WS281x, I updated my fork [https://github.com/sascha432/FastLED](https://github.com/sascha432/FastLED)
+Since the current FastLED 3.5 still has issues with WS281x (ESP8266), I updated my fork [https://github.com/sascha432/FastLED](https://github.com/sascha432/FastLED)
 
 ## Features
 
