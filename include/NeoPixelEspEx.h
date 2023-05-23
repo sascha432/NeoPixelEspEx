@@ -1015,16 +1015,62 @@ namespace NeoPixelEx {
 
     #else
 
+        typedef volatile uint32_t *port_ptr_t;
+
+        template<uint8_t _Pin>
+        static constexpr uint32_t get_gpio_reg()
+        {
+            #ifndef GPIO_OUT1_REG
+                return GPIO_OUT_REG;
+            #else
+                return _Pin < 32 ? GPIO_OUT_REG : GPIO_OUT1_REG;
+            #endif
+        }
+
+        template<uint8_t _Pin>
+        static constexpr uint32_t get_gpio_set_reg()
+        {
+            #ifndef GPIO_OUT1_REG
+                return GPIO_BIT_SET_REG = GPIO_OUT_W1TS_REG;
+            #else
+                return _Pin < 32 ? GPIO_OUT_W1TS_REG : GPIO_OUT1_W1TS_REG;
+            #endif
+        }
+
+        template<uint8_t _Pin>
+        static constexpr uint32_t get_gpio_clear_reg()
+        {
+            #ifndef GPIO_OUT1_REG
+                return GPIO_BIT_CLEAR_REG = GPIO_OUT_W1TC_REG;
+            #else
+                return _Pin < 32 ? GPIO_OUT_W1TC_REG : GPIO_OUT1_W1TC_REG;
+            #endif
+        }
+
+        template<uint8_t _Pin>
+        static constexpr uint32_t get_gpio_mask()
+        {
+            return 1 << (_Pin % 32);
+        }
+
         template<uint8_t _Pin>
         __attribute__((always_inline)) inline static void gpio_set_level_high()
         {
-            gpio_set_level(static_cast<gpio_num_t>(_Pin), !NEOPIXEL_INVERT_OUTPUT);
+            #if NEOPIXEL_INVERT_OUTPUT
+                *((port_ptr_t)get_gpio_clear_reg<_Pin>()) = get_gpio_mask<_Pin>();
+            #else
+                *((port_ptr_t)get_gpio_set_reg<_Pin>()) = get_gpio_mask<_Pin>();
+            #endif
         }
 
         template<uint8_t _Pin>
         __attribute__((always_inline)) inline static void gpio_set_level_low()
         {
-            gpio_set_level(static_cast<gpio_num_t>(_Pin), !!NEOPIXEL_INVERT_OUTPUT);
+            #if NEOPIXEL_INVERT_OUTPUT
+                *((port_ptr_t)get_gpio_set_reg<_Pin>()) = get_gpio_mask<_Pin>();
+            #else
+                *((port_ptr_t)get_gpio_clear_reg<_Pin>()) = get_gpio_mask<_Pin>();
+            #endif
         }
 
     #endif
