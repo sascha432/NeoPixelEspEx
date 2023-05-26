@@ -53,6 +53,9 @@
 #       define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
 #   endif
 #elif ESP32
+#   ifndef NEOPIXEL_ALLOW_INTERRUPTS
+#   define NEOPIXEL_ALLOW_INTERRUPTS 0
+#   endif
 #   define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
 #else
 #   define NEOPIXEL_USE_PRECACHING 0
@@ -959,12 +962,12 @@ namespace NeoPixelEx {
             return _data;
         }
 
-    #if NEOPIXEL_HAVE_STATS
-        __attribute__((always_inline)) inline Stats &getStats()
-        {
-            return _context.getStats();
-        }
-    #endif
+        #if NEOPIXEL_HAVE_STATS
+            __attribute__((always_inline)) inline Stats &getStats()
+            {
+                return _context.getStats();
+            }
+        #endif
 
         __attribute__((always_inline)) inline Context &getContext()
         {
@@ -1075,12 +1078,20 @@ namespace NeoPixelEx {
 
     #endif
 
+    #if ESP8266 || ESP32
+
         __attribute__((always_inline)) inline static uint32_t _getCycleCount(void)
         {
             uint32_t cycleCount;
             __asm__ __volatile__("rsr %0,ccount" : "=a"(cycleCount));
             return cycleCount;
         }
+
+    #else
+
+    #    error not supported
+
+    #endif
 
     #if NEOPIXEL_HAVE_BRIGHTNESS
 
@@ -1253,26 +1264,25 @@ namespace NeoPixelEx {
 
             context.waitRefreshTime(_TChipset::getMinDisplayPeriod());
 
-            #if defined(ESP8266) && !NEOPIXEL_ALLOW_INTERRUPTS
-                ets_intr_lock();
-            #endif
+            bool result;
+            {
+                #if !NEOPIXEL_ALLOW_INTERRUPTS
+                    InterruptLock lock;
+                #endif
 
-            #if NEOPIXEL_DEBUG
-                context.getDebugContext().togglePin();
-            #endif
+                #if NEOPIXEL_DEBUG
+                    context.getDebugContext().togglePin();
+                #endif
 
-            uint32_t period = _TChipset::getCyclesPeriod();
+                uint32_t period = _TChipset::getCyclesPeriod();
 
-            // this part must be in IRAM/ICACHE
-            auto result = _espShow<_Pin, _TChipset, _TPixelType>(brightness, p, end, _TChipset::getCyclesT0H(), _TChipset::getCyclesT1H(), period, _TChipset::getCyclesRES(), _TChipset::getMinDisplayPeriod());
+                // this part must be in IRAM/ICACHE
+                result = _espShow<_Pin, _TChipset, _TPixelType>(brightness, p, end, _TChipset::getCyclesT0H(), _TChipset::getCyclesT1H(), period, _TChipset::getCyclesRES(), _TChipset::getMinDisplayPeriod());
 
-            #if NEOPIXEL_HAVE_STATS
-                context.getStats().increment(result);
-            #endif
-
-            #if defined(ESP8266) && !NEOPIXEL_ALLOW_INTERRUPTS
-                ets_intr_unlock();
-            #endif
+                #if NEOPIXEL_HAVE_STATS
+                    context.getStats().increment(result);
+                #endif
+            }
 
             context.setLastDisplayTime(micros());
 
@@ -1314,14 +1324,14 @@ namespace NeoPixelEx {
 
     extern Context _globalContext;
 
-#if NEOPIXEL_HAVE_STATS
+    #if NEOPIXEL_HAVE_STATS
 
-    __attribute__((always_inline)) inline Stats &getStats()
-    {
-        return _globalContext.getStats();
-    }
+        __attribute__((always_inline)) inline Stats &getStats()
+        {
+            return _globalContext.getStats();
+        }
 
-#endif
+    #endif
 
     inline Context &Context::validate(void *contextPtr)
     {
