@@ -6,8 +6,18 @@
 
 #include <Arduino.h>
 #include <array>
-#if defined(ESP8266)
-#include <user_interface.h>
+
+#if ESP8266
+#    include <user_interface.h>
+#endif
+
+#if ESP32
+#    include "driver/rmt.h"
+#    if defined(ESP_IDF_VERSION)
+#        if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+#            define HAS_ESP_IDF_4
+#        endif
+#    endif
 #endif
 
 // enable debug mode
@@ -103,34 +113,6 @@
 #pragma GCC push_options
 #pragma GCC optimize ("O3")
 
-#if !HAVE_INTERRUPT_LOCK
-
-    #ifdef ESP8266
-
-        #include <interrupts.h>
-        using InterruptLock = esp8266::InterruptLock;
-
-    #elif ESP32
-
-        #include <freertos/portmacro.h>
-
-        struct InterruptLock {
-            InterruptLock() : _mux(portMUX_INITIALIZER_UNLOCKED) {
-                portENTER_CRITICAL_SAFE(&_mux);
-            }
-            ~InterruptLock() {
-                portEXIT_CRITICAL_SAFE(&_mux);
-            }
-            static constexpr uint32_t savedInterruptLevel() {
-                return 0;
-            }
-            portMUX_TYPE _mux;
-        };
-
-    #endif
-
-#endif
-
 // void NeoPixel_fillColorGRB(void *pixels, uint16_t numBytes, const NeoPixelEx::GRB &color);
 
 // deprecated legacy function
@@ -147,6 +129,11 @@ template<uint8_t _Pin>
 bool NeoPixel_espShow(const uint8_t *pixels, uint16_t numBytes, uint16_t brightness = 255, void *context = nullptr);
 
 namespace NeoPixelEx {
+
+    #if ESP32
+        static constexpr size_t kMaxRmtChannels = rmt_channel_t::RMT_CHANNEL_MAX;
+        extern bool rmtChannelsInUse[kMaxRmtChannels];
+    #endif
 
     // timings in nano seconds
     template<uint32_t _T0H, uint32_t _T1H, uint32_t _TPeriod, uint32_t _TReset, uint32_t _MinDisplayPeriod, uint32_t _FCpu/*Hz or MHz*/>
@@ -175,6 +162,8 @@ namespace NeoPixelEx {
 
         static constexpr uint32_t kCyclesT0H = kNanosToCycles(_T0H);
         static constexpr uint32_t kCyclesT1H = kNanosToCycles(_T1H);
+        static constexpr uint32_t kNanosT0H = _T0H;
+        static constexpr uint32_t kNanosT1H = _T1H;
         static constexpr uint32_t kCyclesPeriod = kNanosToCycles(_TPeriod);
         static constexpr uint32_t kCyclesRES = kNanosToCycles(_TReset);
         static constexpr uint32_t kMinDisplayPeriod = _MinDisplayPeriod;
@@ -1047,78 +1036,63 @@ namespace NeoPixelEx {
 
     #else
 
-        typedef volatile uint32_t *port_ptr_t;
+    //     typedef volatile uint32_t *port_ptr_t;
 
-        template<uint8_t _Pin>
-        static constexpr uint32_t get_gpio_reg()
-        {
-            #ifndef GPIO_OUT1_REG
-                return GPIO_OUT_REG;
-            #else
-                return _Pin < 32 ? GPIO_OUT_REG : GPIO_OUT1_REG;
-            #endif
-        }
+    //     template<uint8_t _Pin>
+    //     static constexpr uint32_t get_gpio_reg()
+    //     {
+    //         #ifndef GPIO_OUT1_REG
+    //             return GPIO_OUT_REG;
+    //         #else
+    //             return _Pin < 32 ? GPIO_OUT_REG : GPIO_OUT1_REG;
+    //         #endif
+    //     }
 
-        template<uint8_t _Pin>
-        static constexpr uint32_t get_gpio_set_reg()
-        {
-            #ifndef GPIO_OUT1_REG
-                return GPIO_BIT_SET_REG = GPIO_OUT_W1TS_REG;
-            #else
-                return _Pin < 32 ? GPIO_OUT_W1TS_REG : GPIO_OUT1_W1TS_REG;
-            #endif
-        }
+    //     template<uint8_t _Pin>
+    //     static constexpr uint32_t get_gpio_set_reg()
+    //     {
+    //         #ifndef GPIO_OUT1_REG
+    //             return GPIO_BIT_SET_REG = GPIO_OUT_W1TS_REG;
+    //         #else
+    //             return _Pin < 32 ? GPIO_OUT_W1TS_REG : GPIO_OUT1_W1TS_REG;
+    //         #endif
+    //     }
 
-        template<uint8_t _Pin>
-        static constexpr uint32_t get_gpio_clear_reg()
-        {
-            #ifndef GPIO_OUT1_REG
-                return GPIO_BIT_CLEAR_REG = GPIO_OUT_W1TC_REG;
-            #else
-                return _Pin < 32 ? GPIO_OUT_W1TC_REG : GPIO_OUT1_W1TC_REG;
-            #endif
-        }
+    //     template<uint8_t _Pin>
+    //     static constexpr uint32_t get_gpio_clear_reg()
+    //     {
+    //         #ifndef GPIO_OUT1_REG
+    //             return GPIO_BIT_CLEAR_REG = GPIO_OUT_W1TC_REG;
+    //         #else
+    //             return _Pin < 32 ? GPIO_OUT_W1TC_REG : GPIO_OUT1_W1TC_REG;
+    //         #endif
+    //     }
 
-        template<uint8_t _Pin>
-        static constexpr uint32_t get_gpio_mask()
-        {
-            return 1 << (_Pin % 32);
-        }
+    //     template<uint8_t _Pin>
+    //     static constexpr uint32_t get_gpio_mask()
+    //     {
+    //         return 1 << (_Pin % 32);
+    //     }
 
-        template<uint8_t _Pin>
-        __attribute__((always_inline)) inline static void gpio_set_level_high()
-        {
-            #if NEOPIXEL_INVERT_OUTPUT
-                *((port_ptr_t)get_gpio_clear_reg<_Pin>()) = get_gpio_mask<_Pin>();
-            #else
-                *((port_ptr_t)get_gpio_set_reg<_Pin>()) = get_gpio_mask<_Pin>();
-            #endif
-        }
+    //     template<uint8_t _Pin>
+    //     __attribute__((always_inline)) inline static void gpio_set_level_high()
+    //     {
+    //         #if NEOPIXEL_INVERT_OUTPUT
+    //             *((port_ptr_t)get_gpio_clear_reg<_Pin>()) = get_gpio_mask<_Pin>();
+    //         #else
+    //             *((port_ptr_t)get_gpio_set_reg<_Pin>()) = get_gpio_mask<_Pin>();
+    //         #endif
+    //     }
 
-        template<uint8_t _Pin>
-        __attribute__((always_inline)) inline static void gpio_set_level_low()
-        {
-            #if NEOPIXEL_INVERT_OUTPUT
-                *((port_ptr_t)get_gpio_set_reg<_Pin>()) = get_gpio_mask<_Pin>();
-            #else
-                *((port_ptr_t)get_gpio_clear_reg<_Pin>()) = get_gpio_mask<_Pin>();
-            #endif
-        }
-
-    #endif
-
-    #if ESP8266 || ESP32
-
-        __attribute__((always_inline)) inline static uint32_t _getCycleCount(void)
-        {
-            uint32_t cycleCount;
-            __asm__ __volatile__("rsr %0,ccount" : "=a"(cycleCount));
-            return cycleCount;
-        }
-
-    #else
-
-    #    error not supported
+    //     template<uint8_t _Pin>
+    //     __attribute__((always_inline)) inline static void gpio_set_level_low()
+    //     {
+    //         #if NEOPIXEL_INVERT_OUTPUT
+    //             *((port_ptr_t)get_gpio_set_reg<_Pin>()) = get_gpio_mask<_Pin>();
+    //         #else
+    //             *((port_ptr_t)get_gpio_clear_reg<_Pin>()) = get_gpio_mask<_Pin>();
+    //         #endif
+    //     }
 
     #endif
 
@@ -1176,7 +1150,16 @@ namespace NeoPixelEx {
             return pixel;
         }
 
-        #endif
+    #endif
+
+    #if ESP8266
+
+        __attribute__((always_inline)) inline static uint32_t _getCycleCount(void)
+        {
+            uint32_t cycleCount;
+            __asm__ __volatile__("rsr %0,ccount" : "=a"(cycleCount));
+            return cycleCount;
+        }
 
         // extra function to keep the IRAM usage low
         template<uint8_t _Pin, typename _TChipset, typename _TPixelType>
@@ -1230,16 +1213,13 @@ namespace NeoPixelEx {
                         mask = 0x80; // load next byte indicator
                         if __CONSTEXPR17 (_TPixelType::kReOrder) {
                             // offset of R/G/B
-                            if (ofs == 2) {
+                            if (ofs == sizeof(_TPixelType) - 1) {
                                 ofs = 0;
                             }
                             else {
                                 ofs++;
                             }
                         }
-                        // else {
-                        //     pix = loadPixel(p, brightness);
-                        // }
                     }
                     // else {
                     //     mask = 0; // end of frame indicator
@@ -1286,6 +1266,162 @@ namespace NeoPixelEx {
             #endif
         }
 
+    #elif ESP32
+
+        struct RTM_Adapter_Data_t {
+            const rmt_item32_t bit0;
+            const rmt_item32_t bit1;
+            const uint8_t *pixels;
+            const uint8_t *end;
+            uint16_t brightness;
+        };
+
+        template<typename _TPixelType>
+        static void IRAM_ATTR copy_pixels_rmt_adapter(const void *src, rmt_item32_t *dest, size_t src_size, size_t wanted_num, size_t *translated_size, size_t *item_num)
+        {
+            if (src == NULL || dest == NULL) {
+                *translated_size = 0;
+                *item_num = 0;
+                return;
+            }
+            auto data = reinterpret_cast<const RTM_Adapter_Data_t *>(src);
+            auto p = data->pixels;
+            auto brightness = data->brightness;
+            uint8_t mask = 0x80;
+            uint8_t pix;
+            uint8_t ofs;
+            if __CONSTEXPR17 (_TPixelType::kReOrder) {
+                pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs = 1);
+            }
+            else {
+                pix = loadPixel(p, data->brightness);
+            }
+            pix = applyBrightness(pix, data->brightness);
+
+            size_t numBytes = 1;
+            size_t numBits = 0;
+            rmt_item32_t *pDest = dest;
+            while (numBits < wanted_num && mask) {
+                bool state = (pix & mask);
+                if (!(mask >>= 1)) { // end of byte
+                    if (p < data->end) { // more bytes?
+                        mask = 0x80; // load next byte
+                        if __CONSTEXPR17 (_TPixelType::kReOrder) {
+                            // offset of R/G/B
+                            if (ofs == sizeof(_TPixelType) - 1) {
+                                ofs = 0;
+                            }
+                            else {
+                                ofs++;
+                            }
+                            pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs);
+                        }
+                        else {
+                            pix = loadPixel(p, brightness);
+                        }
+                        pix = applyBrightness(pix, brightness);
+                        numBytes++;
+                    }
+                    // else {
+                    //     mask = 0; // end of frame indicator
+                    // }
+                }
+                pDest->val = state ? data->bit1.val : data->bit0.val;
+                pDest++;
+                numBits++;
+            }
+            *translated_size = numBytes / sizeof(_TPixelType); // get number of pixels
+            *item_num = numBits;
+        }
+
+        // extra function to keep the IRAM usage low
+        template<uint8_t _Pin, typename _TChipset, typename _TPixelType>
+        static bool NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod)
+        {
+            rmt_channel_t channel = rmt_channel_t(kMaxRmtChannels);
+            for (size_t i = 0; i < kMaxRmtChannels; i++) {
+                if (!NeoPixelEx::rmtChannelsInUse[i]) {
+                    rmtChannelsInUse[i] = true;
+                    channel = rmt_channel_t(i);
+                    break;
+                }
+            }
+            if (channel == kMaxRmtChannels) {
+                // Ran out of channels!
+                return true;
+            }
+            #if defined(HAS_ESP_IDF_4)
+                rmt_config_t config = RMT_DEFAULT_CONFIG_TX(gpio_num_t(_Pin), channel);
+                config.clk_div = 2;
+            #else
+                // Match default TX config from ESP-IDF version 3.4
+                rmt_config_t config = {
+                    .rmt_mode = RMT_MODE_TX,
+                    .channel = channel,
+                    .gpio_num = gpio_num_t(pin),
+                    .clk_div = 2,
+                    .mem_block_num = 1,
+                    .tx_config = {
+                        .carrier_freq_hz = 38000,
+                        .carrier_level = RMT_CARRIER_LEVEL_HIGH,
+                        .idle_level = RMT_IDLE_LEVEL_LOW,
+                        .carrier_duty_percent = 33,
+                        .carrier_en = false,
+                        .loop_en = false,
+                        .idle_output_en = true,
+                    }
+                };
+            #endif
+            rmt_config(&config);
+            rmt_driver_install(config.channel, 0, 0);
+
+            // Convert NS timings to ticks
+            uint32_t counter_clk_hz = 0;
+
+            #if defined(HAS_ESP_IDF_4)
+                rmt_get_counter_clock(channel, &counter_clk_hz);
+            #else
+                // this emulates the rmt_get_counter_clock() function from ESP-IDF 3.4
+                if (RMT_LL_HW_BASE->conf_ch[config.channel].conf1.ref_always_on == RMT_BASECLK_REF) {
+                    uint32_t div_cnt = RMT_LL_HW_BASE->conf_ch[config.channel].conf0.div_cnt;
+                    uint32_t div = div_cnt == 0 ? 256 : div_cnt;
+                    counter_clk_hz = REF_CLK_FREQ / (div);
+                } else {
+                    uint32_t div_cnt = RMT_LL_HW_BASE->conf_ch[config.channel].conf0.div_cnt;
+                    uint32_t div = div_cnt == 0 ? 256 : div_cnt;
+                    counter_clk_hz = APB_CLK_FREQ / (div);
+                }
+            #endif
+
+            // Initialize automatic timing translator
+            rmt_translator_init(config.channel, copy_pixels_rmt_adapter<_TPixelType>);
+
+            // NS to tick converter
+            float ratio = (float)counter_clk_hz / 1e9;
+
+            // Write and wait to finish
+            RTM_Adapter_Data_t rmtData = {
+                {{ uint32_t(_TChipset::kNanosT0H * ratio), 1, uint32_t(_TChipset::kNanosT1H * ratio), 0}},    // low bit
+                {{ uint32_t(_TChipset::kNanosT1H * ratio), 1, uint32_t(_TChipset::kNanosT0H * ratio), 0}},    // high bit
+                p,
+                end,
+                brightness
+            };
+
+            rmt_write_sample(config.channel, reinterpret_cast<uint8_t *>(&rmtData), (size_t)(end - p), true);
+            rmt_wait_tx_done(config.channel, pdMS_TO_TICKS(100));
+
+            // Free channel again
+            rmt_driver_uninstall(config.channel);
+            rmtChannelsInUse[channel] = false;
+
+            // gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+
+            return true;
+        }
+
+    #endif
+
         template<uint8_t _Pin, typename _TChipset, typename _TPixelType>
         static bool espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, void *contextPtr)
         {
@@ -1297,24 +1433,25 @@ namespace NeoPixelEx {
 
             context.waitRefreshTime(_TChipset::getMinDisplayPeriod());
 
-            bool result;
             uint32_t period = _TChipset::getCyclesPeriod();
-            {
-                #if !NEOPIXEL_ALLOW_INTERRUPTS
-                    InterruptLock lock;
-                #endif
+            #if !NEOPIXEL_ALLOW_INTERRUPTS
+                ets_intr_lock();
+            #endif
 
-                #if NEOPIXEL_DEBUG
-                    context.getDebugContext().togglePin();
-                #endif
+            #if NEOPIXEL_DEBUG
+                context.getDebugContext().togglePin();
+            #endif
 
-                // this part must be in IRAM/ICACHE
-                result = _espShow<_Pin, _TChipset, _TPixelType>(brightness, p, end, _TChipset::getCyclesT0H(), _TChipset::getCyclesT1H(), period, _TChipset::getCyclesRES(), _TChipset::getMinDisplayPeriod());
+            // this part must be in IRAM/ICACHE
+            bool result = _espShow<_Pin, _TChipset, _TPixelType>(brightness, p, end, _TChipset::getCyclesT0H(), _TChipset::getCyclesT1H(), period, _TChipset::getCyclesRES(), _TChipset::getMinDisplayPeriod());
 
-                #if NEOPIXEL_HAVE_STATS
-                    context.getStats().increment(result);
-                #endif
-            }
+            #if NEOPIXEL_HAVE_STATS
+                context.getStats().increment(result);
+            #endif
+
+            #if !NEOPIXEL_ALLOW_INTERRUPTS
+                ets_intr_unlock();
+            #endif
 
             context.setLastDisplayTime(micros());
 
@@ -1331,6 +1468,9 @@ namespace NeoPixelEx {
         template<uint8_t _Pin, typename _Chipset2, typename _PixelType2>
         static inline bool externalShow(const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
         {
+            if (!numBytes) {
+                return true;
+            }
             bool result = false;
             auto p = pixels;
             auto end = p + numBytes;
@@ -1381,21 +1521,20 @@ namespace NeoPixelEx {
         delayMicroseconds(_Chipset::kResetDelay);
 
         for(uint8_t i = 0; i < 5; i++) {
-            {
+            #if NEOPIXEL_ALLOW_INTERRUPTS
+                ets_intr_lock();
+            #endif
+            if (StaticStrip::externalShow<_Pin, _Chipset, GRB>(nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr))) {
                 #if NEOPIXEL_ALLOW_INTERRUPTS
-                    // if interrupts are allowed, lock entire show method for forceClear
-                    InterruptLock lock;
+                    ets_intr_unlock();
                 #endif
-                if (StaticStrip::externalShow<_Pin, _Chipset, GRB>(nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr))) {
-                    break;
-                }
+                break;
             }
+            #if NEOPIXEL_ALLOW_INTERRUPTS
+                ets_intr_unlock();
+            #endif
             delayMicroseconds(_Chipset::kResetDelay);
         }
-
-        #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
-            ets_intr_unlock();
-        #endif
     }
 
 }

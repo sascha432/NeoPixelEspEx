@@ -15,3 +15,7 @@
 #include "NeoPixelEspEx.h"
 
 NeoPixelEx::Context NeoPixelEx::_globalContext;
+
+#if ESP32
+    bool NeoPixelEx::rmtChannelsInUse[NeoPixelEx::kMaxRmtChannels] = {};
+#endif
