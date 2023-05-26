@@ -103,7 +103,7 @@
 #pragma GCC push_options
 #pragma GCC optimize ("O3")
 
-#if !HAVE_INTERRUPT_LOCK && !NEOPIXEL_ALLOW_INTERRUPTS
+#if !HAVE_INTERRUPT_LOCK
 
     #ifdef ESP8266
 
@@ -1202,24 +1202,28 @@ namespace NeoPixelEx {
             for (;;) {
                 t = (pix & mask) ? time1 : time0;
 
-                #if NEOPIXEL_ALLOW_INTERRUPTS
-                    // check first if we have a timeout
-                    if (((c = _getCycleCount()) - startTime) <= period + static_cast<uint8_t>(microsecondsToClockCycles(0.6))) {
-                #endif
-                        while (((c = _getCycleCount()) - startTime) < period) {
-                            // wait for bit start
+                if (startTime) {
+
+                    #if NEOPIXEL_ALLOW_INTERRUPTS
+                        // check first if we have a timeout
+                        if (((c = _getCycleCount()) - startTime) <= period + static_cast<uint8_t>(microsecondsToClockCycles(0.6))) {
+                    #endif
+                            while (((c = _getCycleCount()) - startTime) < period) {
+                                // wait for bit start
+                            }
+                    #if NEOPIXEL_ALLOW_INTERRUPTS
                         }
-                #if NEOPIXEL_ALLOW_INTERRUPTS
-                    }
-                    else if (startTime) {
-                        // set period to 0 to remove the wait time and marker for timeout
-                        period = 0;
-                        break;
-                    }
-                #endif
+                        else if (startTime) {
+                            // set period to 0 to remove the wait time and marker for timeout
+                            period = 0;
+                            break;
+                        }
+                    #endif
+
+                }
 
                 gpio_set_level_high<_Pin>();
-                startTime = c; // save start time
+                startTime = c ? c : 1; // save start time, zero is reserved
 
                 if (!(mask >>= 1)) {
                     if (p < end) {
@@ -1294,6 +1298,7 @@ namespace NeoPixelEx {
             context.waitRefreshTime(_TChipset::getMinDisplayPeriod());
 
             bool result;
+            uint32_t period = _TChipset::getCyclesPeriod();
             {
                 #if !NEOPIXEL_ALLOW_INTERRUPTS
                     InterruptLock lock;
@@ -1302,8 +1307,6 @@ namespace NeoPixelEx {
                 #if NEOPIXEL_DEBUG
                     context.getDebugContext().togglePin();
                 #endif
-
-                uint32_t period = _TChipset::getCyclesPeriod();
 
                 // this part must be in IRAM/ICACHE
                 result = _espShow<_Pin, _TChipset, _TPixelType>(brightness, p, end, _TChipset::getCyclesT0H(), _TChipset::getCyclesT1H(), period, _TChipset::getCyclesRES(), _TChipset::getMinDisplayPeriod());
@@ -1377,21 +1380,17 @@ namespace NeoPixelEx {
         pinMode(_Pin, OUTPUT);
         delayMicroseconds(_Chipset::kResetDelay);
 
-        #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
-            ets_intr_lock();
-        #endif
-
         for(uint8_t i = 0; i < 5; i++) {
-            if (StaticStrip::externalShow<_Pin, _Chipset, GRB>(nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr))) {
-                break;
+            {
+                #if NEOPIXEL_ALLOW_INTERRUPTS
+                    // if interrupts are allowed, lock entire show method for forceClear
+                    InterruptLock lock;
+                #endif
+                if (StaticStrip::externalShow<_Pin, _Chipset, GRB>(nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr))) {
+                    break;
+                }
             }
-            #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
-                ets_intr_unlock();
-            #endif
             delayMicroseconds(_Chipset::kResetDelay);
-            #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
-                ets_intr_lock();
-            #endif
         }
 
         #if defined(ESP8266) && NEOPIXEL_ALLOW_INTERRUPTS
