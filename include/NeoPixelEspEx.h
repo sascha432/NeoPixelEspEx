@@ -30,12 +30,12 @@
 #   define NEOPIXEL_HAVE_STATS 1
 #endif
 
-#if defined(ESP8266)
+#if ESP8266
 // allow interrupts during the output. recommended for more than a couple pixels
 // interrupts that take too long will abort the current frame and increment NeoPixel_getAbortedFrames
-#   ifndef NEOPIXEL_ALLOW_INTERRUPTS
-#   define NEOPIXEL_ALLOW_INTERRUPTS 1
-#   endif
+#    ifndef NEOPIXEL_ALLOW_INTERRUPTS
+#        define NEOPIXEL_ALLOW_INTERRUPTS 1
+#    endif
 // use prefetching instead of IRAM
 //
 // precaching adds extra overhead to each show() call
@@ -44,28 +44,29 @@
 // NEOPIXEL_ALLOW_INTERRUPTS=0 212 byte
 // NEOPIXEL_ALLOW_INTERRUPTS=1 316 byte
 //
-#   ifndef NEOPIXEL_USE_PRECACHING
-#       define NEOPIXEL_USE_PRECACHING 1
-#   endif
-#   if NEOPIXEL_USE_PRECACHING
-#       define NEOPIXEL_ESPSHOW_FUNC_ATTR PRECACHE_ATTR
-#   else
-#       define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
-#   endif
+#    ifndef NEOPIXEL_USE_PRECACHING
+#        define NEOPIXEL_USE_PRECACHING 1
+#    endif
+#    if NEOPIXEL_USE_PRECACHING
+#        define NEOPIXEL_ESPSHOW_FUNC_ATTR PRECACHE_ATTR
+#    else
+#        define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
+#    endif
 #elif ESP32
-#   ifndef NEOPIXEL_ALLOW_INTERRUPTS
-#   define NEOPIXEL_ALLOW_INTERRUPTS 0
-#   endif
-#   define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
+#    ifndef NEOPIXEL_ALLOW_INTERRUPTS
+#        define NEOPIXEL_ALLOW_INTERRUPTS 0
+#    endif
+#    define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
+#    undef NEOPIXEL_INTERRUPT_RETRY_COUNT
 #else
-#   define NEOPIXEL_USE_PRECACHING 0
+#    define NEOPIXEL_USE_PRECACHING 0
 #endif
 
 #if NEOPIXEL_ALLOW_INTERRUPTS
 // retry if a frame got aborted
-#   ifndef NEOPIXEL_INTERRUPT_RETRY_COUNT
-#       define NEOPIXEL_INTERRUPT_RETRY_COUNT 2
-#   endif
+#    ifndef NEOPIXEL_INTERRUPT_RETRY_COUNT
+#        define NEOPIXEL_INTERRUPT_RETRY_COUNT 2
+#    endif
 #elif defined(NEOPIXEL_INTERRUPT_RETRY_COUNT) && (NEOPIXEL_INTERRUPT_RETRY_COUNT > 0)
 #   error NEOPIXEL_INTERRUPT_RETRY_COUNT must be 0 if NEOPIXEL_ALLOW_INTERRUPTS is disabled
 #else
@@ -101,6 +102,34 @@
 
 #pragma GCC push_options
 #pragma GCC optimize ("O3")
+
+#if !HAVE_INTERRUPT_LOCK && !NEOPIXEL_ALLOW_INTERRUPTS
+
+    #ifdef ESP8266
+
+        #include <interrupts.h>
+        using InterruptLock = esp8266::InterruptLock;
+
+    #elif ESP32
+
+        #include <freertos/portmacro.h>
+
+        struct InterruptLock {
+            InterruptLock() : _mux(portMUX_INITIALIZER_UNLOCKED) {
+                portENTER_CRITICAL_SAFE(&_mux);
+            }
+            ~InterruptLock() {
+                portEXIT_CRITICAL_SAFE(&_mux);
+            }
+            static constexpr uint32_t savedInterruptLevel() {
+                return 0;
+            }
+            portMUX_TYPE _mux;
+        };
+
+    #endif
+
+#endif
 
 // void NeoPixel_fillColorGRB(void *pixels, uint16_t numBytes, const NeoPixelEx::GRB &color);
 
