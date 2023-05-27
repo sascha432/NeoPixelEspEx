@@ -2,6 +2,7 @@
 
 ## Version 0.0.2
 
+- Support for ESP32 RMT
 - Fixed wrong color of the first pixel if CRGBType was used
 - Updated timings for WS2813
 - GPIO16 seems to have some issues when running with 160MHz, try another port if any issues occur

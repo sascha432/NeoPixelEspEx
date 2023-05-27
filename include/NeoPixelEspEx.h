@@ -63,11 +63,11 @@
 #        define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
 #    endif
 #elif ESP32
-#    ifndef NEOPIXEL_ALLOW_INTERRUPTS
-#        define NEOPIXEL_ALLOW_INTERRUPTS 0
-#    endif
+#    undef NEOPIXEL_ALLOW_INTERRUPTS
+#    define NEOPIXEL_ALLOW_INTERRUPTS 1
+#    undef NEOPIXEL_USE_PRECACHING
+#    define NEOPIXEL_USE_PRECACHING 0
 #    define NEOPIXEL_ESPSHOW_FUNC_ATTR IRAM_ATTR
-#    undef NEOPIXEL_INTERRUPT_RETRY_COUNT
 #else
 #    define NEOPIXEL_USE_PRECACHING 0
 #endif
@@ -131,8 +131,17 @@ bool NeoPixel_espShow(const uint8_t *pixels, uint16_t numBytes, uint16_t brightn
 namespace NeoPixelEx {
 
     #if ESP32
+        struct RTM_Adapter_Data_t {
+            rmt_item32_t bit0;
+            rmt_item32_t bit1;
+            uint8_t *begin;
+            uint8_t *end;
+            uint16_t brightness;
+            bool inUse;
+        };
+
         static constexpr size_t kMaxRmtChannels = rmt_channel_t::RMT_CHANNEL_MAX;
-        extern bool rmtChannelsInUse[kMaxRmtChannels];
+        extern RTM_Adapter_Data_t rmtChannelsInUse[kMaxRmtChannels];
     #endif
 
     // timings in nano seconds
@@ -1034,66 +1043,6 @@ namespace NeoPixelEx {
             }
         }
 
-    #else
-
-    //     typedef volatile uint32_t *port_ptr_t;
-
-    //     template<uint8_t _Pin>
-    //     static constexpr uint32_t get_gpio_reg()
-    //     {
-    //         #ifndef GPIO_OUT1_REG
-    //             return GPIO_OUT_REG;
-    //         #else
-    //             return _Pin < 32 ? GPIO_OUT_REG : GPIO_OUT1_REG;
-    //         #endif
-    //     }
-
-    //     template<uint8_t _Pin>
-    //     static constexpr uint32_t get_gpio_set_reg()
-    //     {
-    //         #ifndef GPIO_OUT1_REG
-    //             return GPIO_BIT_SET_REG = GPIO_OUT_W1TS_REG;
-    //         #else
-    //             return _Pin < 32 ? GPIO_OUT_W1TS_REG : GPIO_OUT1_W1TS_REG;
-    //         #endif
-    //     }
-
-    //     template<uint8_t _Pin>
-    //     static constexpr uint32_t get_gpio_clear_reg()
-    //     {
-    //         #ifndef GPIO_OUT1_REG
-    //             return GPIO_BIT_CLEAR_REG = GPIO_OUT_W1TC_REG;
-    //         #else
-    //             return _Pin < 32 ? GPIO_OUT_W1TC_REG : GPIO_OUT1_W1TC_REG;
-    //         #endif
-    //     }
-
-    //     template<uint8_t _Pin>
-    //     static constexpr uint32_t get_gpio_mask()
-    //     {
-    //         return 1 << (_Pin % 32);
-    //     }
-
-    //     template<uint8_t _Pin>
-    //     __attribute__((always_inline)) inline static void gpio_set_level_high()
-    //     {
-    //         #if NEOPIXEL_INVERT_OUTPUT
-    //             *((port_ptr_t)get_gpio_clear_reg<_Pin>()) = get_gpio_mask<_Pin>();
-    //         #else
-    //             *((port_ptr_t)get_gpio_set_reg<_Pin>()) = get_gpio_mask<_Pin>();
-    //         #endif
-    //     }
-
-    //     template<uint8_t _Pin>
-    //     __attribute__((always_inline)) inline static void gpio_set_level_low()
-    //     {
-    //         #if NEOPIXEL_INVERT_OUTPUT
-    //             *((port_ptr_t)get_gpio_set_reg<_Pin>()) = get_gpio_mask<_Pin>();
-    //         #else
-    //             *((port_ptr_t)get_gpio_clear_reg<_Pin>()) = get_gpio_mask<_Pin>();
-    //         #endif
-    //     }
-
     #endif
 
     #if NEOPIXEL_HAVE_BRIGHTNESS
@@ -1268,69 +1217,67 @@ namespace NeoPixelEx {
 
     #elif ESP32
 
-        struct RTM_Adapter_Data_t {
-            const rmt_item32_t bit0;
-            const rmt_item32_t bit1;
-            const uint8_t *pixels;
-            const uint8_t *end;
-            uint16_t brightness;
-        };
-
         template<typename _TPixelType>
         static void IRAM_ATTR copy_pixels_rmt_adapter(const void *src, rmt_item32_t *dest, size_t src_size, size_t wanted_num, size_t *translated_size, size_t *item_num)
         {
-            if (src == NULL || dest == NULL) {
+            RTM_Adapter_Data_t *data = nullptr;
+            // find meta data by checking if the src pointer fits into the range
+            for (size_t i = 0; i < kMaxRmtChannels; i++) {
+                auto &channel = rmtChannelsInUse[i];
+                if (channel.inUse && src >= channel.begin && src < channel.end) {
+                    data = &channel;
+                    break;
+                }
+            }
+            if (data == nullptr || src == NULL || dest == NULL) {
                 *translated_size = 0;
                 *item_num = 0;
                 return;
             }
-            auto data = reinterpret_cast<const RTM_Adapter_Data_t *>(src);
-            auto p = data->pixels;
-            auto brightness = data->brightness;
+            auto pixels = static_cast<const uint8_t *>(src);
+            const auto begin = data->begin;
+            const auto end = data->end;
+            const auto brightness = data->brightness;
+            const auto bit0 = data->bit0.val;
+            const auto bit1 = data->bit1.val;
             uint8_t mask = 0x80;
             uint8_t pix;
             uint8_t ofs;
             if __CONSTEXPR17 (_TPixelType::kReOrder) {
-                pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs = 1);
+                ofs = ((pixels - begin) + 1) % (sizeof(_TPixelType)); // calculate offset from current source position
+                pix = loadPixel<typename _TPixelType::OrderType>(pixels, brightness, ofs);
             }
             else {
-                pix = loadPixel(p, data->brightness);
+                pix = loadPixel(pixels, brightness);
             }
-            pix = applyBrightness(pix, data->brightness);
+            pix = applyBrightness(pix, brightness);
 
-            size_t numBytes = 1;
             size_t numBits = 0;
             rmt_item32_t *pDest = dest;
             while (numBits < wanted_num && mask) {
                 bool state = (pix & mask);
                 if (!(mask >>= 1)) { // end of byte
-                    if (p < data->end) { // more bytes?
+                    if (pixels < end) { // more bytes?
                         mask = 0x80; // load next byte
                         if __CONSTEXPR17 (_TPixelType::kReOrder) {
                             // offset of R/G/B
-                            if (ofs == sizeof(_TPixelType) - 1) {
-                                ofs = 0;
-                            }
-                            else {
-                                ofs++;
-                            }
-                            pix = loadPixel<typename _TPixelType::OrderType>(p, brightness, ofs);
+                            ofs = (ofs + 1) % sizeof(_TPixelType);
+                            pix = loadPixel<typename _TPixelType::OrderType>(pixels, brightness, ofs);
                         }
                         else {
-                            pix = loadPixel(p, brightness);
+                            pix = loadPixel(pixels, brightness);
                         }
                         pix = applyBrightness(pix, brightness);
-                        numBytes++;
                     }
                     // else {
                     //     mask = 0; // end of frame indicator
                     // }
                 }
-                pDest->val = state ? data->bit1.val : data->bit0.val;
+                pDest->val = state ? bit1 : bit0;
                 pDest++;
                 numBits++;
             }
-            *translated_size = numBytes / sizeof(_TPixelType); // get number of pixels
+            *translated_size = numBits / 8;
             *item_num = numBits;
         }
 
@@ -1338,10 +1285,12 @@ namespace NeoPixelEx {
         template<uint8_t _Pin, typename _TChipset, typename _TPixelType>
         static bool NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod)
         {
-            rmt_channel_t channel = rmt_channel_t(kMaxRmtChannels);
+            RTM_Adapter_Data_t *channelData = nullptr;
+            auto channel = rmt_channel_t(kMaxRmtChannels);
             for (size_t i = 0; i < kMaxRmtChannels; i++) {
-                if (!NeoPixelEx::rmtChannelsInUse[i]) {
-                    rmtChannelsInUse[i] = true;
+                if (!rmtChannelsInUse[i].inUse) {
+                    rmtChannelsInUse[i].inUse = true;
+                    channelData = &rmtChannelsInUse[i];
                     channel = rmt_channel_t(i);
                     break;
                 }
@@ -1399,21 +1348,18 @@ namespace NeoPixelEx {
             // NS to tick converter
             float ratio = (float)counter_clk_hz / 1e9;
 
-            // Write and wait to finish
-            RTM_Adapter_Data_t rmtData = {
-                {{ uint32_t(_TChipset::kNanosT0H * ratio), 1, uint32_t(_TChipset::kNanosT1H * ratio), 0}},    // low bit
-                {{ uint32_t(_TChipset::kNanosT1H * ratio), 1, uint32_t(_TChipset::kNanosT0H * ratio), 0}},    // high bit
-                p,
-                end,
-                brightness
-            };
+            channelData->bit0 = {{ uint32_t(_TChipset::kNanosT0H * ratio), 1, uint32_t(_TChipset::kNanosT1H * ratio), 0}};
+            channelData->bit1 = {{ uint32_t(_TChipset::kNanosT1H * ratio), 1, uint32_t(_TChipset::kNanosT0H * ratio), 0}};
+            channelData->begin = (uint8_t *)p;
+            channelData->end = (uint8_t *)end;
+            channelData->brightness = brightness;
 
-            rmt_write_sample(config.channel, reinterpret_cast<uint8_t *>(&rmtData), (size_t)(end - p), true);
+            rmt_write_sample(config.channel, p, (size_t)(end - p), true);
             rmt_wait_tx_done(config.channel, pdMS_TO_TICKS(100));
 
             // Free channel again
             rmt_driver_uninstall(config.channel);
-            rmtChannelsInUse[channel] = false;
+            channelData->inUse = false;
 
             // gpio_set_direction(pin, GPIO_MODE_OUTPUT);
 
@@ -1521,20 +1467,23 @@ namespace NeoPixelEx {
         delayMicroseconds(_Chipset::kResetDelay);
 
         for(uint8_t i = 0; i < 5; i++) {
-            #if NEOPIXEL_ALLOW_INTERRUPTS
+            #if ESP8266 && NEOPIXEL_ALLOW_INTERRUPTS
                 ets_intr_lock();
             #endif
             if (StaticStrip::externalShow<_Pin, _Chipset, GRB>(nullptr, numPixels * sizeof(GRB), 0, Context::validate(contextPtr))) {
-                #if NEOPIXEL_ALLOW_INTERRUPTS
+                #if ESP8266 && NEOPIXEL_ALLOW_INTERRUPTS
                     ets_intr_unlock();
                 #endif
-                break;
+                return;
             }
-            #if NEOPIXEL_ALLOW_INTERRUPTS
+            #if ESP8266 && NEOPIXEL_ALLOW_INTERRUPTS
                 ets_intr_unlock();
             #endif
             delayMicroseconds(_Chipset::kResetDelay);
         }
+        #if ESP8266 && NEOPIXEL_ALLOW_INTERRUPTS
+            ets_intr_unlock();
+        #endif
     }
 
 }

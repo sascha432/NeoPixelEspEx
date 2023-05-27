@@ -17,5 +17,5 @@
 NeoPixelEx::Context NeoPixelEx::_globalContext;
 
 #if ESP32
-    bool NeoPixelEx::rmtChannelsInUse[NeoPixelEx::kMaxRmtChannels] = {};
+    NeoPixelEx::RTM_Adapter_Data_t NeoPixelEx::rmtChannelsInUse[NeoPixelEx::kMaxRmtChannels] = {};
 #endif
