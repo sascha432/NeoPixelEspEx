@@ -1218,6 +1218,28 @@ namespace NeoPixelEx {
     #elif ESP32
 
         template<typename _TPixelType>
+        static void IRAM_ATTR clear_pixels_rmt_adapter(const void *src, rmt_item32_t *dest, size_t src_size, size_t wanted_num, size_t *translated_size, size_t *item_num)
+        {
+            RTM_Adapter_Data_t *data = nullptr;
+            // find meta data by checking if the src pointer fits into the range
+            for (size_t i = 0; i < kMaxRmtChannels; i++) {
+                auto &channel = rmtChannelsInUse[i];
+                if (channel.inUse && src >= channel.begin && src < channel.end) {
+                    data = &channel;
+                    break;
+                }
+            }
+            if (data == nullptr || src == NULL || dest == NULL) {
+                *translated_size = 0;
+                *item_num = 0;
+                return;
+            }
+            std::fill_n(dest, wanted_num, data->bit0);
+            *translated_size = wanted_num / 8;
+            *item_num = wanted_num;
+        }
+
+        template<typename _TPixelType>
         static void IRAM_ATTR copy_pixels_rmt_adapter(const void *src, rmt_item32_t *dest, size_t src_size, size_t wanted_num, size_t *translated_size, size_t *item_num)
         {
             RTM_Adapter_Data_t *data = nullptr;
@@ -1261,7 +1283,12 @@ namespace NeoPixelEx {
                         mask = 0x80; // load next byte
                         if __CONSTEXPR17 (_TPixelType::kReOrder) {
                             // offset of R/G/B
-                            ofs = (ofs + 1) % sizeof(_TPixelType);
+                            if (ofs == sizeof(_TPixelType) - 1) {
+                                ofs = 0;
+                            }
+                            else {
+                                ofs++;
+                            }
                             pix = loadPixel<typename _TPixelType::OrderType>(pixels, brightness, ofs);
                         }
                         else {
@@ -1348,7 +1375,14 @@ namespace NeoPixelEx {
             #endif
 
             // Initialize automatic timing translator
-            rmt_translator_init(config.channel, copy_pixels_rmt_adapter<_TPixelType>);
+            if (p == nullptr) {
+                p++;
+                end++;
+                rmt_translator_init(config.channel, clear_pixels_rmt_adapter<_TPixelType>);
+            }
+            else {
+                rmt_translator_init(config.channel, copy_pixels_rmt_adapter<_TPixelType>);
+            }
 
             // NS to tick converter
             float ratio = (float)counter_clk_hz / 1e9;
@@ -1366,7 +1400,7 @@ namespace NeoPixelEx {
             rmt_driver_uninstall(config.channel);
             channelData->inUse = false;
 
-            // gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+            gpio_set_direction(gpio_num_t(_Pin), GPIO_MODE_OUTPUT);
 
             return true;
         }
