@@ -1277,6 +1277,11 @@ namespace NeoPixelEx {
                 pDest++;
                 numBits++;
             }
+            while (numBits < wanted_num) { // fill the rest with zeros
+                pDest->val = 0;
+                pDest++;
+                numBits++;
+            }
             *translated_size = numBits / 8;
             *item_num = numBits;
         }
