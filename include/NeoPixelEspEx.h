@@ -1134,25 +1134,21 @@ namespace NeoPixelEx {
             for (;;) {
                 t = (pix & mask) ? time1 : time0;
 
-                if (startTime) {
-
-                    #if NEOPIXEL_ALLOW_INTERRUPTS
-                        // check first if we have a timeout
-                        if (((c = _getCycleCount()) - startTime) <= period + static_cast<uint8_t>(microsecondsToClockCycles(0.6))) {
-                    #endif
-                            while (((c = _getCycleCount()) - startTime) < period) {
-                                // wait for bit start
-                            }
-                    #if NEOPIXEL_ALLOW_INTERRUPTS
+                #if NEOPIXEL_ALLOW_INTERRUPTS
+                    // check first if we have a timeout
+                    if (((c = _getCycleCount()) - startTime) <= period + static_cast<uint8_t>(microsecondsToClockCycles(0.6))) {
+                #endif
+                        while (((c = _getCycleCount()) - startTime) < period) {
+                            // wait for bit start
                         }
-                        else if (startTime) {
-                            // set period to 0 to remove the wait time and marker for timeout
-                            period = 0;
-                            break;
-                        }
-                    #endif
-
-                }
+                #if NEOPIXEL_ALLOW_INTERRUPTS
+                    }
+                    else if (startTime) {
+                        // set period to 0 to remove the wait time and marker for timeout
+                        period = 0;
+                        break;
+                    }
+                #endif
 
                 gpio_set_level_high<_Pin>();
                 startTime = c ? c : 1; // save start time, zero is reserved
