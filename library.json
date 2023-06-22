@@ -1,6 +1,6 @@
 
 {
-    "name": "NeoPixelEx",
+    "name": "NeoPixelEspEx",
     "description": "",
     "keywords": "NeoPixel FastLED ESP8266 ESP32 WS2811 WS2812 WS2813",
     "authors": {
@@ -11,7 +11,7 @@
         "type": "git",
         "url": "https://github.com/sascha432/NeoPixelEspEx.git"
     },
-    "version": "0.0.2",
+    "version": "0.0.3",
     "license": "GPL-3.0",
     "frameworks": "arduino",
     "platforms": [

@@ -1,5 +1,9 @@
 # Changelog
 
+## Version 0.0.3
+
+ - Changed name to NeoPixelEspEx
+
 ## Version 0.0.2
 
 - Support for ESP32 RMT
