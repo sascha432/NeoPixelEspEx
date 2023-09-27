@@ -922,21 +922,21 @@ namespace NeoPixelEx {
         }
 
         // color is RGB
-        __attribute__((always_inline)) inline void fill(uint16_t numPixels, uint32_t color) {
-            std::fill_n(data(), numPixels, pixel_type(color));
+        __attribute__((always_inline)) inline void fill(size_t numPixels, uint32_t color) {
+            fill(numPixels, pixel_type(color));
         }
 
-        __attribute__((always_inline)) inline void fill(uint16_t numPixels, const pixel_type &color) {
-            std::fill_n(data(), numPixels, color);
+        __attribute__((always_inline)) inline void fill(size_t numPixels, const pixel_type &color) {
+            std::fill_n(_data.data(), numPixels, color);
         }
 
         // color is RGB
-        __attribute__((always_inline)) inline void fill(uint16_t offset, uint16_t numPixels, uint32_t color) {
-            std::fill_n(_data.begin() + offset, numPixels, pixel_type(color));
+        __attribute__((always_inline)) inline void fill(uint32_t offset, size_t numPixels, uint32_t color) {
+            fill(offset, numPixels, pixel_type(color));
         }
 
-        __attribute__((always_inline)) inline void fill(uint16_t offset, uint16_t numPixels, const pixel_type &color) {
-            std::fill_n(_data.begin() + offset, numPixels, color);
+        __attribute__((always_inline)) inline void fill(uint32_t offset, size_t numPixels, const pixel_type &color) {
+            std::fill_n(_data.data() + offset, numPixels, color);
         }
 
         __attribute__((always_inline)) inline void show(uint8_t brightness = 255) {
