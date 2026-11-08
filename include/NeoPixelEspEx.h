@@ -72,6 +72,13 @@
 #    define NEOPIXEL_USE_PRECACHING 0
 #endif
 
+// O3 for the transport only (show, bit-bang loop, RMT translators). GCC does not inline a function with its own
+// optimize options into a caller with other options: a pragma around the whole header turned every small accessor
+// (Context::validate(), getStats(), ...) into a call in the application code
+#ifndef NEOPIXEL_OPTIMIZE_ATTR
+#    define NEOPIXEL_OPTIMIZE_ATTR __attribute__((optimize("O3")))
+#endif
+
 #if NEOPIXEL_ALLOW_INTERRUPTS
 // retry if a frame got aborted
 #    ifndef NEOPIXEL_INTERRUPT_RETRY_COUNT
@@ -109,9 +116,6 @@
 #       define __CONSTEXPR17
 #   endif
 #endif
-
-#pragma GCC push_options
-#pragma GCC optimize ("O3")
 
 // void NeoPixel_fillColorGRB(void *pixels, uint16_t numBytes, const NeoPixelEx::GRB &color);
 
@@ -1112,7 +1116,7 @@ namespace NeoPixelEx {
 
         // extra function to keep the IRAM usage low
         template<uint8_t _Pin, typename _TChipset, typename _TPixelType>
-        static bool NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod)
+        static bool NEOPIXEL_OPTIMIZE_ATTR NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod)
         {
             uint32_t startTime = 0;
             uint32_t c, t;
@@ -1214,7 +1218,7 @@ namespace NeoPixelEx {
     #elif ESP32
 
         template<typename _TPixelType>
-        static void IRAM_ATTR clear_pixels_rmt_adapter(const void *src, rmt_item32_t *dest, size_t src_size, size_t wanted_num, size_t *translated_size, size_t *item_num)
+        static void NEOPIXEL_OPTIMIZE_ATTR IRAM_ATTR clear_pixels_rmt_adapter(const void *src, rmt_item32_t *dest, size_t src_size, size_t wanted_num, size_t *translated_size, size_t *item_num)
         {
             RTM_Adapter_Data_t *data = nullptr;
             // find meta data by checking if the src pointer fits into the range
@@ -1236,7 +1240,7 @@ namespace NeoPixelEx {
         }
 
         template<typename _TPixelType>
-        static void IRAM_ATTR copy_pixels_rmt_adapter(const void *src, rmt_item32_t *dest, size_t src_size, size_t wanted_num, size_t *translated_size, size_t *item_num)
+        static void NEOPIXEL_OPTIMIZE_ATTR IRAM_ATTR copy_pixels_rmt_adapter(const void *src, rmt_item32_t *dest, size_t src_size, size_t wanted_num, size_t *translated_size, size_t *item_num)
         {
             RTM_Adapter_Data_t *data = nullptr;
             // find meta data by checking if the src pointer fits into the range
@@ -1311,7 +1315,7 @@ namespace NeoPixelEx {
 
         // extra function to keep the IRAM usage low
         template<uint8_t _Pin, typename _TChipset, typename _TPixelType>
-        static bool NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod)
+        static bool NEOPIXEL_OPTIMIZE_ATTR NEOPIXEL_ESPSHOW_FUNC_ATTR _espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, uint32_t time0, uint32_t time1, uint32_t &period, uint32_t wait, uint32_t minWaitPeriod)
         {
             RTM_Adapter_Data_t *channelData = nullptr;
             auto channel = rmt_channel_t(kMaxRmtChannels);
@@ -1404,7 +1408,7 @@ namespace NeoPixelEx {
     #endif
 
         template<uint8_t _Pin, typename _TChipset, typename _TPixelType>
-        static bool espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, void *contextPtr)
+        static bool NEOPIXEL_OPTIMIZE_ATTR espShow(uint16_t brightness, const uint8_t *p, const uint8_t *end, void *contextPtr)
         {
             auto &context = *reinterpret_cast<NeoPixelEx::Context *>(contextPtr);
             brightness &= 0xff;
@@ -1447,7 +1451,7 @@ namespace NeoPixelEx {
 
     public:
         template<uint8_t _Pin, typename _Chipset2, typename _PixelType2>
-        static inline bool externalShow(const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
+        static inline bool NEOPIXEL_OPTIMIZE_ATTR externalShow(const uint8_t *pixels, uint16_t numBytes, uint8_t brightness, Context &context)
         {
             if (!numBytes) {
                 return true;
@@ -1542,8 +1546,3 @@ inline bool NeoPixel_espShow(const uint8_t *pixels, uint16_t numBytes, uint16_t 
 {
     return NeoPixelEx::StaticStrip::externalShow<_Pin, NeoPixelEx::DefaultTimings, NeoPixelEx::GRB>(pixels, numBytes, brightness, NeoPixelEx::Context::validate(contextPtr));
 }
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC pop_options
-#pragma GCC diagnostic pop
